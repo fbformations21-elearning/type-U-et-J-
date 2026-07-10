@@ -1,0 +1,2326 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Plan 3D — ERP 24 chambres / 3 blocs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;padding:0;background:#0a1220;color:#e8eef6;font-family:'Inter',sans-serif;overflow:hidden;height:100%;}
+  #canvasWrap{position:fixed;inset:0;}
+  canvas{display:block;}
+
+  .hud{position:fixed;z-index:5;pointer-events:none;}
+  .topbar{top:0;left:0;right:0;padding:16px 22px;display:flex;justify-content:space-between;align-items:flex-start;background:linear-gradient(180deg, rgba(10,18,32,.92), rgba(10,18,32,0));}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .mark{width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#2f9e58,#1c6b3c);display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;}
+  h1{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:20px;margin:0;letter-spacing:.3px;}
+  .subtitle{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#7f93ac;margin-top:2px;}
+  .hint{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9fc4de;background:rgba(15,27,45,.75);border:1px solid #22405e;padding:7px 12px;border-radius:8px;pointer-events:auto;}
+
+  .legend{bottom:0;left:0;padding:16px 22px 20px;pointer-events:auto;}
+  .legend-inner{display:flex;flex-wrap:wrap;gap:8px 18px;background:rgba(15,27,45,.85);border:1px solid #22405e;border-radius:10px;padding:12px 16px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#cfe0f2;backdrop-filter:blur(4px);}
+  .li{display:flex;align-items:center;gap:7px;}
+  .sw{width:12px;height:12px;border-radius:3px;flex:none;}
+
+  .info{top:0;right:0;padding:16px 22px;pointer-events:auto;}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7f93ac;border:1px solid #22405e;padding:5px 10px;border-radius:20px;background:rgba(15,27,45,.7);}
+
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0a1220;z-index:10;font-family:'IBM Plex Mono',monospace;color:#7f93ac;font-size:13px;transition:opacity .4s;}
+</style>
+</head>
+<body>
+
+<div id="loading">Construction du plan 3D…</div>
+<div id="canvasWrap"></div>
+
+<div class="hud topbar">
+  <div class="brand">
+    <div class="mark">3D</div>
+    <div>
+      <h1>Plan 3D — ERP 24 chambres</h1>
+      <div class="subtitle">3 blocs de 8 chambres · Hall central · Formation SSIAP</div>
+    </div>
+  </div>
+  <div class="badge">FBFORMATIONS21</div>
+</div>
+
+<div class="hud" style="top:76px;left:22px;display:flex;gap:10px;flex-wrap:wrap;">
+  <div class="hint">🖱️ Glisser : tourner &nbsp;·&nbsp; Molette : zoomer &nbsp;·&nbsp; Clic droit + glisser : déplacer</div>
+  <button id="walkToggle" class="hint" style="cursor:pointer;border:1px solid #3d6d8d;background:rgba(24,54,80,.8);color:#dff1ff;font-family:'IBM Plex Mono',monospace;">🚶 Entrer en mode visite</button>
+  <button id="fullscreenBtn" class="hint" style="cursor:pointer;border:1px solid #3d6d8d;background:rgba(24,54,80,.8);color:#dff1ff;font-family:'IBM Plex Mono',monospace;">⛶ Plein écran</button>
+</div>
+
+<div class="hud" id="walkHint" style="top:76px;left:22px;display:none;">
+  <div class="hint">Z/W A/Q S D ou ZQSD : marcher &nbsp;·&nbsp; Souris : regarder &nbsp;·&nbsp; Échap : quitter</div>
+</div>
+
+<div id="crosshair" style="position:fixed;top:50%;left:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#dff1ff;box-shadow:0 0 4px #4fb8e8;display:none;z-index:6;pointer-events:none;"></div>
+
+<div class="hud" id="controlBar" style="bottom:0;left:0;right:0;padding:16px 22px 20px;pointer-events:auto;">
+  <div style="display:flex;flex-wrap:wrap;gap:10px;background:rgba(15,27,45,.85);border:1px solid #22405e;border-radius:10px;padding:14px 16px;backdrop-filter:blur(4px);">
+    <button id="fireFloor2Btn" class="hint" style="cursor:pointer;border:1px solid #ff5a2e;background:rgba(90,30,10,.8);color:#ffd7c2;font-family:'IBM Plex Mono',monospace;">🔥 Départ de feu — Étage</button>
+    <button id="pcfFloor2Btn" class="hint" style="cursor:pointer;border:1px solid #8a3a30;background:rgba(80,30,26,.8);color:#ffd9d2;font-family:'IBM Plex Mono',monospace;">🔥 Fermer PCF — Étage</button>
+    <button id="desFloor2Btn" class="hint" style="cursor:pointer;border:1px solid #2c5878;background:rgba(20,45,70,.8);color:#cfeaff;font-family:'IBM Plex Mono',monospace;">💨 Désenfumage — Étage</button>
+    <button id="evacBtn" class="hint" style="cursor:pointer;border:1px solid #5aa06a;background:rgba(20,60,35,.8);color:#d7f2df;font-family:'IBM Plex Mono',monospace;">🚶 Évacuation résidents</button>
+    <button id="exutoireBtn" class="hint" style="cursor:pointer;border:1px solid #4fb8e8;background:rgba(20,60,90,.8);color:#cfeaff;font-family:'IBM Plex Mono',monospace;">🌬️ Exutoire — Escalier Nord</button>
+    <button id="demoRoomDoorBtn" class="hint" style="cursor:pointer;border:1px solid #d68c4a;background:rgba(80,50,15,.85);color:#ffe6c7;font-family:'IBM Plex Mono',monospace;">🚪 Ouverture porte chambre 3</button>
+    <button id="resetAllBtn" class="hint" style="cursor:pointer;border:1px solid #7f93ac;background:rgba(30,42,58,.85);color:#dfe6ee;font-family:'IBM Plex Mono',monospace;">🔄 Réinitialiser le scénario</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* ===================== SETUP ===================== */
+const wrap = document.getElementById('canvasWrap');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1220);
+scene.fog = new THREE.Fog(0x0a1220, 220, 480);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 2000);
+camera.position.set(120, 110, 160);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = false; // désactivé : scène trop lourde (2 étages + fenêtres) pour rester fluide/stable partout
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+wrap.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(0, 4, 15);
+controls.maxPolarAngle = Math.PI*0.49;
+controls.minDistance = 40;
+controls.maxDistance = 400;
+
+/* ===================== WALL COLLIDERS (for walk mode) ===================== */
+const wallColliders = []; // {xMin,xMax,zMin,zMax}
+function registerCollider(worldX, worldZ, halfX, halfZ){
+  wallColliders.push({xMin:worldX-halfX, xMax:worldX+halfX, zMin:worldZ-halfZ, zMax:worldZ+halfZ});
+}
+function collidesAt(x, z, radius){
+  for(let i=0;i<wallColliders.length;i++){
+    const c = wallColliders[i];
+    if(x+radius>c.xMin && x-radius<c.xMax && z+radius>c.zMin && z-radius<c.zMax) return true;
+  }
+  return false;
+}
+
+/* ===================== WALK MODE (première personne) ===================== */
+const orbitSavedState = { pos: camera.position.clone(), target: controls.target.clone() };
+let walkMode = false;
+let yaw = Math.PI, pitch = 0;
+const EYE_HEIGHT = 5.6, PLAYER_RADIUS = 1.3, WALK_SPEED = 16;
+const keys = {};
+document.addEventListener('keydown', e=>{ keys[e.code]=true; });
+document.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+const walkToggle = document.getElementById('walkToggle');
+const walkHint = document.getElementById('walkHint');
+const crosshair = document.getElementById('crosshair');
+const orbitHintBar = document.querySelector('.hud[style*="top:76px"]');
+
+function enterWalkMode(){
+  orbitSavedState.pos.copy(camera.position);
+  orbitSavedState.target.copy(controls.target);
+  controls.enabled = false;
+  walkMode = true;
+  camera.position.set(0, FLOOR_H + EYE_HEIGHT, 0);
+  yaw = Math.PI; pitch = 0;
+  renderer.domElement.requestPointerLock();
+  walkHint.style.display = 'block';
+  crosshair.style.display = 'block';
+  walkToggle.textContent = '🛑 Quitter le mode visite';
+  ceilingMeshes.forEach(m=> m.visible = true);
+}
+function exitWalkMode(){
+  walkMode = false;
+  controls.enabled = true;
+  camera.position.copy(orbitSavedState.pos);
+  controls.target.copy(orbitSavedState.target);
+  if(document.pointerLockElement) document.exitPointerLock();
+  walkHint.style.display = 'none';
+  crosshair.style.display = 'none';
+  walkToggle.textContent = '🚶 Entrer en mode visite';
+  ceilingMeshes.forEach(m=> m.visible = false);
+}
+walkToggle.addEventListener('click', ()=>{ walkMode ? exitWalkMode() : enterWalkMode(); });
+
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+fullscreenBtn.addEventListener('click', ()=>{
+  if(!document.fullscreenElement){
+    (document.documentElement.requestFullscreen && document.documentElement.requestFullscreen())?.catch?.(()=>{});
+  } else {
+    document.exitFullscreen && document.exitFullscreen();
+  }
+});
+document.addEventListener('fullscreenchange', ()=>{
+  fullscreenBtn.textContent = document.fullscreenElement ? '⛶ Quitter le plein écran' : '⛶ Plein écran';
+});
+
+let fireDoorsClosedFloor2 = false;
+let desenfumageActiveFloor2 = false;
+
+document.getElementById('fireFloor2Btn').addEventListener('click', function(){
+  fireFloor2.setActive(!fireFloor2.active);
+  this.textContent = fireFloor2.active ? '🔥 Départ de feu — Étage : EN COURS' : '🔥 Départ de feu — Étage';
+});
+document.getElementById('pcfFloor2Btn').addEventListener('click', function(){
+  fireDoorsClosedFloor2 = !fireDoorsClosedFloor2;
+  triggerFireDoorsList(doubleDoorsFloor2, fireDoorsClosedFloor2);
+  this.textContent = fireDoorsClosedFloor2 ? '🚪 Rouvrir PCF — Étage' : '🔥 Fermer PCF — Étage';
+});
+document.getElementById('desFloor2Btn').addEventListener('click', function(){
+  desenfumageActiveFloor2 = !desenfumageActiveFloor2;
+  northVoletsFloor2.forEach(v=> setVoletActive(v, desenfumageActiveFloor2));
+  this.textContent = desenfumageActiveFloor2 ? '💨 Désenfumage — Étage : ACTIF' : '💨 Désenfumage — Étage';
+});
+document.getElementById('exutoireBtn').addEventListener('click', function(){
+  const open = triggerExutoire();
+  this.textContent = open ? '🌬️ Exutoire — OUVERT' : '🌬️ Exutoire — Escalier Nord';
+});
+document.getElementById('evacBtn').addEventListener('click', function(){
+  evacuationActive = true;
+  northOccupantsFloor2.forEach(o=> o.visible=false);
+  hallNursesFloor2.forEach(o=> o.visible=false);
+  this.textContent = '🚶 Évacuation en cours…';
+  this.disabled = true;
+});
+document.getElementById('demoRoomDoorBtn').addEventListener('click', function(){
+  demoRoomOpen = !demoRoomOpen;
+  demoRoomDoors.forEach(d=> d.targetProgress = demoRoomOpen ? 0 : 1);
+  this.textContent = demoRoomOpen ? '🚪 Refermer la porte — chambre 3' : '🚪 Ouverture porte chambre 3';
+});
+document.getElementById('resetAllBtn').addEventListener('click', function(){
+  // Feu et fumée
+  fireFloor2.reset();
+  document.getElementById('fireFloor2Btn').textContent = '🔥 Départ de feu — Étage';
+
+  // Portes coupe-feu du hall (étage)
+  fireDoorsClosedFloor2 = false;
+  doubleDoorsFloor2.forEach(d=>{
+    d.progress = 0; d.targetProgress = 0;
+    d.leafGroup.rotation.y = d.openAngle;
+  });
+  document.getElementById('pcfFloor2Btn').textContent = '🔥 Fermer PCF — Étage';
+
+  // Désenfumage
+  desenfumageActiveFloor2 = false;
+  northVoletsFloor2.forEach(v=> setVoletActive(v, false));
+  document.getElementById('desFloor2Btn').textContent = '💨 Désenfumage — Étage';
+
+  // Exutoire
+  exutoireTarget = 0; exutoireProgress = 0;
+  if(exutoireHinge){ exutoireHinge.rotation.z = 0; exutoireHinge.children[0].material.emissiveIntensity = 0; }
+  document.getElementById('exutoireBtn').textContent = '🌬️ Exutoire — Escalier Nord';
+
+  // Porte couloir / escalier (referme, comme au départ)
+  northStairDoorsFloor2.forEach(d=>{
+    d.progress = 1; d.targetProgress = 1;
+    d.leafGroup.rotation.y = d.closedAngle;
+  });
+
+  // Fumée dans le hall
+  hallSmokeParticles.forEach(p=> scene.remove(p.spr));
+  hallSmokeParticles.length = 0;
+  hallSmokeAcc = 0;
+
+  // Fumée dans la cage d'escalier
+  stairSmokeParticles.forEach(p=> scene.remove(p.spr));
+  stairSmokeParticles.length = 0;
+
+  // Porte de chambre pédagogique et fumée d'invasion
+  demoRoomOpen = false;
+  demoRoomDoors.forEach(d=>{
+    d.progress = 1; d.targetProgress = 1;
+    d.leafGroup.rotation.y = d.closedAngle;
+  });
+  roomInvasionParticles.forEach(p=> scene.remove(p.spr));
+  roomInvasionParticles.length = 0;
+  document.getElementById('demoRoomDoorBtn').textContent = '🚪 Ouverture porte chambre 3';
+
+  // Évacuation des résidents
+  evacuationActive = false;
+  evacuees.forEach(e=>{
+    e.t = -e.delay;
+    e.arrived = false;
+    e.group.visible = false;
+  });
+  const evacBtnEl = document.getElementById('evacBtn');
+  evacBtnEl.textContent = '🚶 Évacuation résidents';
+  evacBtnEl.disabled = false;
+  northOccupantsFloor2.forEach(o=> o.visible=true);
+  hallNursesFloor2.forEach(o=> o.visible=true);
+});
+document.addEventListener('pointerlockchange', ()=>{
+  if(!document.pointerLockElement && walkMode) exitWalkMode();
+});
+document.addEventListener('mousemove', e=>{
+  if(!walkMode || !document.pointerLockElement) return;
+  yaw -= e.movementX * 0.0022;
+  pitch -= e.movementY * 0.0022;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch));
+});
+
+function updateWalk(dt){
+  camera.rotation.set(0,0,0);
+  camera.rotateY(yaw);
+  camera.rotateX(pitch);
+
+  let fwd = 0, strafe = 0;
+  if(keys['KeyW']||keys['ArrowUp']) fwd += 1;
+  if(keys['KeyS']||keys['ArrowDown']) fwd -= 1;
+  if(keys['KeyD']||keys['ArrowRight']) strafe += 1;
+  if(keys['KeyA']||keys['ArrowLeft']) strafe -= 1;
+  if(fwd===0 && strafe===0) return;
+  const len = Math.hypot(fwd,strafe) || 1;
+  fwd/=len; strafe/=len;
+
+  const sinY = Math.sin(yaw), cosY = Math.cos(yaw);
+  // forward direction in XZ for yaw (camera looks toward -Z at yaw=0 after our rotateY convention)
+  const dx = (-sinY)*fwd + cosY*strafe;
+  const dz = (-cosY)*fwd - sinY*strafe;
+  const dist = WALK_SPEED*dt;
+
+  const nx = camera.position.x + dx*dist;
+  const nz = camera.position.z + dz*dist;
+  if(!collidesAt(nx, camera.position.z, PLAYER_RADIUS)) camera.position.x = nx;
+  if(!collidesAt(camera.position.x, nz, PLAYER_RADIUS)) camera.position.z = nz;
+  camera.position.y = FLOOR_H + EYE_HEIGHT;
+}
+
+/* Lighting */
+scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x1a2436, 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(140, 220, 90);
+sun.castShadow = false;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left = -160; sun.shadow.camera.right = 160;
+sun.shadow.camera.top = 160; sun.shadow.camera.bottom = -160;
+sun.shadow.camera.far = 500;
+scene.add(sun);
+
+/* Ground */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(1200,1200),
+  new THREE.MeshStandardMaterial({color:0x0f1b2d})
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -0.35;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(1200, 120, 0x1c2f45, 0x162238);
+grid.position.y = -0.34;
+scene.add(grid);
+
+/* ===================== HELPERS ===================== */
+function makeDoorPlate(text){
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const fontSize = 30;
+  ctx.font = `bold ${fontSize}px Arial`;
+  const textW = ctx.measureText(text).width;
+  const w = Math.max(110, Math.ceil(textW) + 36);
+  const h = 60;
+  canvas.width=w; canvas.height=h;
+  ctx.fillStyle = '#16283f';
+  ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = '#f5c518';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2,2,w-4,h-4);
+  ctx.fillStyle = '#f2f6fa';
+  ctx.font = `bold ${fontSize}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, w/2, h/2+1);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({map:tex, depthTest:true, depthWrite:false});
+  const spr = new THREE.Sprite(mat);
+  const s = 0.0136;
+  spr.scale.set(w*s, h*s, 1);
+  return spr;
+}
+function addRoomNumber(x, y, z, number){
+  const spr = makeDoorPlate(String(number));
+  spr.position.set(x, y, z);
+  scene.add(spr);
+}
+
+function makeLabel(text){
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const fontSize = 40;
+  ctx.font = `600 ${fontSize}px Arial`;
+  const w = Math.ceil(ctx.measureText(text).width) + 44;
+  const h = fontSize + 34;
+  canvas.width = w; canvas.height = h;
+  ctx.font = `600 ${fontSize}px Arial`;
+  const r = 12;
+  ctx.fillStyle = 'rgba(13,24,42,0.88)';
+  ctx.strokeStyle = 'rgba(79,184,232,0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(r,0); ctx.arcTo(w,0,w,h,r); ctx.arcTo(w,h,0,h,r);
+  ctx.arcTo(0,h,0,0,r); ctx.arcTo(0,0,w,0,r); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#eaf3fb';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 22, h/2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({map:tex, depthTest:true, depthWrite:false});
+  const spr = new THREE.Sprite(mat);
+  const s = 0.052;
+  spr.scale.set(w*s, h*s, 1);
+  spr.visible = false; // textes retirés pour le moment
+  return spr;
+}
+
+const WALL_H = 10;
+const WALL_T = 0.6;
+const wallMat = new THREE.MeshStandardMaterial({color:0xf2ede4, roughness:0.9});
+const doorMat = new THREE.MeshStandardMaterial({color:0xb98a54, roughness:0.6});
+const ceilingMeshes = []; // plafonds : créés partout, mais masqués sauf en mode visite
+const ceilingMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.95, side:THREE.DoubleSide});
+const doubleDoors = []; // portes coupe-feu battantes, animées à l'ouverture/fermeture
+const northStairDoorsFloor2 = []; // portes couloir/escalier du bloc Nord, à l'étage (s'ouvrent au passage des évacués)
+let demoRoomDoorGround = null, demoRoomDoorFloor2 = null, demoRoomZ = null;
+
+/**
+ * Build a room: floor + up to 4 walls, one side left open (doorway).
+ * w = size along X, d = size along Z. Centered at (cx, 0, cz).
+ * openSide: 'N' (=-Z open), 'S' (=+Z open), 'E' (=+X open), 'W' (=-X open)
+ */
+function buildRoom(cx, cz, w, d, floorColor, openSide, label, labelYOffset, windowSide, skipDoorLeaf){
+  const group = new THREE.Group();
+  group.position.set(cx, 0, cz);
+
+  const floor = new THREE.Mesh(
+    new THREE.BoxGeometry(w, 0.6, d),
+    new THREE.MeshStandardMaterial({color:floorColor, roughness:0.85})
+  );
+  floor.position.y = 0.3;
+  floor.receiveShadow = true;
+  group.add(floor);
+
+  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(w, 0.4, d), ceilingMat);
+  ceiling.position.y = WALL_H + 0.6;
+  ceiling.visible = false;
+  ceiling.receiveShadow = true;
+  group.add(ceiling);
+  ceilingMeshes.push(ceiling);
+
+  function wall(len, axisIsX, offX, offZ){
+    const geo = axisIsX ? new THREE.BoxGeometry(len, WALL_H, WALL_T) : new THREE.BoxGeometry(WALL_T, WALL_H, len);
+    const m = new THREE.Mesh(geo, wallMat);
+    m.position.set(offX, WALL_H/2+0.6, offZ);
+    m.castShadow = true; m.receiveShadow = true;
+    group.add(m);
+    const halfX = axisIsX ? len/2 : WALL_T/2;
+    const halfZ = axisIsX ? WALL_T/2 : len/2;
+    registerCollider(cx+offX, cz+offZ, halfX, halfZ);
+  }
+
+  // Wall with a door opening (used on the corridor-facing side): two wall
+  // stubs flanking a gap, plus a door leaf sitting in the frame.
+  function wallWithDoor(len, axisIsX, offX, offZ, doorWidth, skipLeaf){
+    const dw = Math.min(doorWidth, len*0.7);
+    const stub = (len - dw) / 2;
+    if(stub > 0.05){
+      if(axisIsX){
+        wall(stub, true, offX - (dw/2 + stub/2), offZ);
+        wall(stub, true, offX + (dw/2 + stub/2), offZ);
+      } else {
+        wall(stub, false, offX, offZ - (dw/2 + stub/2));
+        wall(stub, false, offX, offZ + (dw/2 + stub/2));
+      }
+    }
+    // door leaf, slightly ajar into the room, in a contrasting wood tone
+    const leafT = 0.35;
+    if(!skipLeaf){
+      const leafGeo = axisIsX ? new THREE.BoxGeometry(dw*0.92, WALL_H*0.78, leafT) : new THREE.BoxGeometry(leafT, WALL_H*0.78, dw*0.92);
+      const leaf = new THREE.Mesh(leafGeo, doorMat);
+      leaf.position.set(offX, (WALL_H*0.78)/2 + 0.6, offZ);
+      leaf.castShadow = true;
+      group.add(leaf);
+    }
+    // door frame highlight (thin strip above the opening, like a lintel)
+    const lintelGeo = axisIsX ? new THREE.BoxGeometry(dw, WALL_H*0.14, WALL_T) : new THREE.BoxGeometry(WALL_T, WALL_H*0.14, dw);
+    const lintel = new THREE.Mesh(lintelGeo, wallMat);
+    lintel.position.set(offX, WALL_H*0.85 + 0.6 + (WALL_H*0.14)/2 - 0.2, offZ);
+    group.add(lintel);
+  }
+
+  // Wall with a window opening: sill + lintel in the usual wall material,
+  // a glazed pane in between.
+  const winGlassMat = new THREE.MeshStandardMaterial({
+    color:0xdaf1fb, transparent:true, opacity:0.32,
+    roughness:0.08, metalness:0.05, side:THREE.DoubleSide
+  });
+  const winFrameMat = new THREE.MeshStandardMaterial({color:0xe8ecef, roughness:0.5, metalness:0.2});
+  const winShineMat = new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.16, depthWrite:false});
+  function wallWithWindow(len, axisIsX, offX, offZ){
+    const winLen = Math.min(len*0.55, 4.2);
+    const sillH = 3.0, winH = 3.3, lintelH = WALL_H - sillH - winH;
+    // sill (bas du mur, plein)
+    const sillGeo = axisIsX ? new THREE.BoxGeometry(len, sillH, WALL_T) : new THREE.BoxGeometry(WALL_T, sillH, len);
+    const sill = new THREE.Mesh(sillGeo, wallMat);
+    sill.position.set(offX, sillH/2 + 0.6, offZ);
+    sill.castShadow = true; sill.receiveShadow = true;
+    group.add(sill);
+    // lintel (haut du mur, plein)
+    const lintelGeo = axisIsX ? new THREE.BoxGeometry(len, lintelH, WALL_T) : new THREE.BoxGeometry(WALL_T, lintelH, len);
+    const lintel = new THREE.Mesh(lintelGeo, wallMat);
+    lintel.position.set(offX, sillH + winH + lintelH/2 + 0.6, offZ);
+    lintel.castShadow = true; lintel.receiveShadow = true;
+    group.add(lintel);
+    // jambages latéraux (pleins, de part et d'autre de la baie)
+    const jambLen = (len - winLen)/2;
+    if(jambLen > 0.05){
+      const jGeo = axisIsX ? new THREE.BoxGeometry(jambLen, winH, WALL_T) : new THREE.BoxGeometry(WALL_T, winH, jambLen);
+      [-(winLen/2+jambLen/2), (winLen/2+jambLen/2)].forEach(o=>{
+        const j = new THREE.Mesh(jGeo, wallMat);
+        if(axisIsX) j.position.set(offX+o, sillH+winH/2+0.6, offZ);
+        else j.position.set(offX, sillH+winH/2+0.6, offZ+o);
+        j.castShadow = true; j.receiveShadow = true;
+        group.add(j);
+      });
+    }
+    // vitrage (verre + croisillon + reflet)
+    const glassW = axisIsX ? winLen*0.94 : 0.06, glassH = winH*0.86;
+    const glassD = axisIsX ? 0.06 : winLen*0.94;
+    const glassGeo = new THREE.BoxGeometry(glassW, glassH, glassD);
+    const glass = new THREE.Mesh(glassGeo, winGlassMat);
+    glass.position.set(offX, sillH+winH/2+0.6, offZ);
+    group.add(glass);
+
+    // croisillon central (une barre horizontale + une verticale, effet fenêtre à petits bois)
+    const barMatBox = axisIsX
+      ? [new THREE.BoxGeometry(winLen*0.9, 0.08, 0.1), new THREE.BoxGeometry(0.08, winH*0.82, 0.1)]
+      : [new THREE.BoxGeometry(0.1, 0.08, winLen*0.9), new THREE.BoxGeometry(0.1, winH*0.82, 0.08)];
+    barMatBox.forEach(g=>{
+      const bar = new THREE.Mesh(g, winFrameMat);
+      bar.position.set(offX, sillH+winH/2+0.6, offZ+ (axisIsX?0.02:0));
+      group.add(bar);
+    });
+
+    // reflet diagonal (éclat de lumière sur la vitre)
+    const sign = axisIsX ? (offZ>=0?1:-1) : (offX>=0?1:-1);
+    const shineGeo = axisIsX
+      ? new THREE.BoxGeometry(winLen*0.3, winH*1.25, 0.02)
+      : new THREE.BoxGeometry(0.02, winH*1.25, winLen*0.3);
+    const shine = new THREE.Mesh(shineGeo, winShineMat);
+    if(axisIsX){
+      shine.position.set(offX - winLen*0.14, sillH+winH/2+0.6, offZ + sign*0.07);
+      shine.rotation.z = THREE.MathUtils.degToRad(27);
+    } else {
+      shine.position.set(offX + sign*0.07, sillH+winH/2+0.6, offZ - winLen*0.14);
+      shine.rotation.x = THREE.MathUtils.degToRad(27);
+    }
+    group.add(shine);
+
+    // collider identique à un mur plein (on ne traverse pas une fenêtre)
+    const halfX = axisIsX ? len/2 : WALL_T/2;
+    const halfZ = axisIsX ? WALL_T/2 : len/2;
+    registerCollider(cx+offX, cz+offZ, halfX, halfZ);
+  }
+
+  const DOOR_W = 3.2;
+  function buildSide(side, len, axisIsX, offX, offZ){
+    if(side===openSide) wallWithDoor(len, axisIsX, offX, offZ, DOOR_W, skipDoorLeaf);
+    else if(side===windowSide) wallWithWindow(len, axisIsX, offX, offZ);
+    else wall(len, axisIsX, offX, offZ);
+  }
+  buildSide('N', w, true, 0, -d/2);
+  buildSide('S', w, true, 0,  d/2);
+  buildSide('E', d, false,  w/2, 0);
+  buildSide('W', d, false, -w/2, 0);
+
+  if(label){
+    const spr = makeLabel(label);
+    spr.position.set(0, labelYOffset||WALL_H+3, 0);
+    group.add(spr);
+  }
+  scene.add(group);
+  return group;
+}
+
+function buildFloorSlab(cx, cz, w, d, color, withCeiling){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,0.45,d), new THREE.MeshStandardMaterial({color, roughness:0.9}));
+  m.position.set(cx, 0.22, cz);
+  m.receiveShadow = true;
+  scene.add(m);
+  if(withCeiling !== false){
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(w, 0.4, d), ceilingMat);
+    ceiling.position.set(cx, WALL_H + 0.6, cz);
+    ceiling.visible = false;
+    ceiling.receiveShadow = true;
+    scene.add(ceiling);
+    ceilingMeshes.push(ceiling);
+  }
+  return m;
+}
+
+/**
+ * Ajoute un lit, une armoire et un bureau dans une chambre.
+ * cx,cz,w,d,openSide = mêmes paramètres que buildRoom() pour cette pièce.
+ * Le mobilier s'oriente automatiquement selon le côté de la porte.
+ */
+function addChambreFurniture(cx, cz, w, d, openSide){
+  let uDir, vDir, uExtent, vExtent, wallAxisIsX;
+  if(openSide==='E'){ uDir=[-1,0]; vDir=[0,1]; uExtent=w; vExtent=d; wallAxisIsX=false; }
+  else if(openSide==='W'){ uDir=[1,0]; vDir=[0,1]; uExtent=w; vExtent=d; wallAxisIsX=false; }
+  else if(openSide==='N'){ uDir=[0,1]; vDir=[1,0]; uExtent=d; vExtent=w; wallAxisIsX=true; }
+  else { uDir=[0,-1]; vDir=[1,0]; uExtent=d; vExtent=w; wallAxisIsX=true; } // 'S'
+
+  function place(u, v){
+    const uo = u - uExtent/2;
+    return [cx + uo*uDir[0] + v*vDir[0], cz + uo*uDir[1] + v*vDir[1]];
+  }
+  function addBox(u, v, lenAlongV, height, depthAlongU, color, y0){
+    const [x,z] = place(u,v);
+    const geo = wallAxisIsX ? new THREE.BoxGeometry(lenAlongV, height, depthAlongU) : new THREE.BoxGeometry(depthAlongU, height, lenAlongV);
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color, roughness:0.75}));
+    m.position.set(x, (y0||0)+height/2+0.6, z);
+    m.castShadow = true; m.receiveShadow = true;
+    scene.add(m);
+    return m;
+  }
+
+  /* Lit : contre le mur du fond, centré latéralement */
+  addBox(uExtent-2.0, 0, 6.4, 0.5, 3.6, 0x8a6a4a, 0);          // sommier/cadre
+  addBox(uExtent-2.0, 0, 6.0, 0.45, 3.2, 0xdfe7ee, 0.5);       // matelas
+  addBox(uExtent-3.9, 0, 1.5, 0.3, 3.0, 0xffffff, 0.95);       // oreiller
+
+  /* Armoire : coin arrière, à l'écart du lit */
+  addBox(uExtent-0.9, vExtent/2-1.5, 2.6, 4.2, 1.3, 0x6b4a30, 0);
+
+  /* Bureau : coin proche de la porte */
+  addBox(2.6, -(vExtent/2-1.8), 3.2, 1.0, 1.5, 0x9c7a4f, 0);
+  addBox(1.4, -(vExtent/2-1.8), 1.0, 0.95, 1.0, 0x445566, 0);  // chaise
+}
+
+function buildExitDoor(cx, cz, axisIsX, label){
+  // door leaf
+  const size = axisIsX ? [8, WALL_H*0.85, 0.5] : [0.5, WALL_H*0.85, 8];
+  const door = new THREE.Mesh(new THREE.BoxGeometry(...size), new THREE.MeshStandardMaterial({color:0x2f9e58, emissive:0x0c3a20, roughness:0.5}));
+  door.position.set(cx, WALL_H*0.85/2+0.6, cz);
+  door.castShadow = true;
+  scene.add(door);
+  // small exterior landing
+  const landW = axisIsX ? 10 : 3, landD = axisIsX ? 3 : 10;
+  const outward = axisIsX ? {x:0,z: (cz>=0?1:-1)*2.2} : {x:(cx>=0?1:-1)*2.2, z:0};
+  buildFloorSlab(cx+outward.x, cz+outward.z, landW, landD, 0x35506b);
+  const spr = makeLabel('⛔ ' + label);
+  spr.position.set(cx, WALL_H+3, cz);
+  scene.add(spr);
+}
+
+const activeFans = []; // ventilateurs des volets en cours d'aspiration, tournent en boucle
+let northVolets = [];         // les 3 volets du couloir Nord (contrôlés ensemble par le bouton désenfumage)
+let desenfumageActive = false;
+
+/**
+ * Volet de désenfumage : simple rectangle plaqué contre le mur du couloir.
+ * cx,cz = point le long de l'axe du couloir. corridorAxisIsX = true si le
+ * couloir file le long de X (blocs Est/Ouest), false le long de Z (bloc Nord).
+ * level: 'high' = juste sous le plafond (extraction), 'low' = au ras du sol
+ * contre le mur (amenée d'air). active: true = volet en aspiration (couleur
+ * vive + petit ventilateur animé), utilisé pour le volet qui aspire la fumée.
+ */
+function buildVolet(cx, cz, corridorAxisIsX, level, active, key){
+  const wallOffset = -(CORR_W/2) + 0.25;
+  let px, pz, panelW, panelD;
+  if(corridorAxisIsX){ px = cx; pz = wallOffset; panelW = 2.6; panelD = 0.25; }
+  else { px = wallOffset; pz = cz; panelW = 0.25; panelD = 2.6; }
+
+  const panelH = level==='high' ? 2.0 : 1.7;
+  const centerY = level==='high' ? (WALL_H - 1.2) : (panelH/2 + 0.6);
+
+  const panelMat = new THREE.MeshStandardMaterial({
+    color: 0x2c5878, emissive: 0x000000, emissiveIntensity: 0, roughness: 0.5
+  });
+  const m = new THREE.Mesh(new THREE.BoxGeometry(panelW, panelH, panelD), panelMat);
+  m.position.set(px, centerY, pz);
+  m.castShadow = true;
+  if(key){ m.userData.voletKey = key; m.userData.isVoletPanel = true; }
+  scene.add(m);
+
+  let spinner = null, flap = null, flapAxis = null, flapOpenAngle = 0;
+  if(active){
+    // clapet du volet : bascule vers l'extérieur (couloir) à l'ouverture
+    const hingeY = centerY - panelH/2;
+    const flapGroup = new THREE.Group();
+    flapGroup.position.set(px, hingeY, pz);
+    scene.add(flapGroup);
+    const flapGeo = corridorAxisIsX
+      ? new THREE.BoxGeometry(panelW*0.85, panelH*0.95, 0.06)
+      : new THREE.BoxGeometry(0.06, panelH*0.95, panelW*0.85);
+    const flapMesh = new THREE.Mesh(flapGeo, panelMat);
+    flapMesh.position.set(0, panelH*0.95/2, 0);
+    flapGroup.add(flapMesh);
+    flap = flapGroup;
+    flapAxis = corridorAxisIsX ? 'x' : 'z';
+    flapOpenAngle = corridorAxisIsX ? THREE.MathUtils.degToRad(75) : THREE.MathUtils.degToRad(-75);
+    voletFlaps.push({group:flapGroup, axis:flapAxis, openAngle:flapOpenAngle, progress:0, targetProgress:0});
+
+    const mount = new THREE.Group();
+    const outward = 0.3;
+    mount.position.set(
+      corridorAxisIsX ? px : px + outward,
+      centerY,
+      corridorAxisIsX ? pz + outward : pz
+    );
+    if(corridorAxisIsX) mount.rotation.x = Math.PI/2; else mount.rotation.z = Math.PI/2;
+    scene.add(mount);
+
+    spinner = new THREE.Group();
+    mount.add(spinner);
+    const disc = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.75, 0.75, 0.1, 16),
+      new THREE.MeshStandardMaterial({color:0x173049, roughness:0.6})
+    );
+    spinner.add(disc);
+    const bladeMat = new THREE.MeshStandardMaterial({color:0xdfe9f2, roughness:0.4});
+    const blade1 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 0.18), bladeMat);
+    spinner.add(blade1);
+    const blade2 = blade1.clone();
+    blade2.rotation.y = Math.PI/2;
+    spinner.add(blade2);
+    if(key){ spinner.userData.voletKey = key; spinner.userData.isFanSpinner = true; }
+    activeFans.push(spinner);
+    if(key){ flapGroup.userData.voletKey = key; flapGroup.userData.isVoletFlap = true; flapGroup.userData.flapAxis = flapAxis; flapGroup.userData.flapOpenAngle = flapOpenAngle; }
+  }
+
+  return {px, pz, panelMat, spinner, flap};
+}
+
+/* Volets : liste des clapets animables (ouverture/fermeture progressive) */
+const voletFlaps = [];
+function updateVoletFlaps(dt){
+  const rate = 1/1.0; // ~1s pour un clapet complet
+  voletFlaps.forEach(f=>{
+    if(f.progress === f.targetProgress) return;
+    const dir = f.targetProgress > f.progress ? 1 : -1;
+    f.progress = THREE.MathUtils.clamp(f.progress + dir*dt*rate, 0, 1);
+    const ease = f.progress*f.progress*(3-2*f.progress);
+    if(f.axis==='x') f.group.rotation.x = ease*f.openAngle;
+    else f.group.rotation.z = ease*f.openAngle;
+  });
+}
+function setFlapTarget(flapGroup, isOpen){
+  const entry = voletFlaps.find(f=>f.group===flapGroup);
+  if(entry) entry.targetProgress = isOpen ? 1 : 0;
+}
+
+/* Active ou désactive visuellement un volet (couleur + ventilateur + clapet) */
+function setVoletActive(volet, isActive){
+  volet.panelMat.color.set(isActive ? 0x4fb8e8 : 0x2c5878);
+  volet.panelMat.emissive.set(isActive ? 0x0d3a52 : 0x000000);
+  volet.panelMat.emissiveIntensity = isActive ? 0.7 : 0;
+  if(volet.spinner) volet.spinner.userData.spinning = isActive;
+  if(volet.flap) setFlapTarget(volet.flap, isActive);
+}
+
+function angleForDir(dx, dz){ return Math.atan2(-dz, dx); }
+
+/**
+ * Porte coupe-feu battante à un seul vantail, pivotant sur une charnière.
+ * hx,hz = position de la charnière. closedDir/openDir = directions [dx,dz]
+ * (non normalisées) vers lesquelles pointe le vantail fermé / ouvert.
+ * Démarre en position ouverte ; se ferme via triggerFireDoors().
+ */
+function buildSwingDoor(hx, hz, closedDir, openDir, leafLen, height, faceOffset, options){
+  options = options || {};
+  const closedAngle = angleForDir(closedDir[0], closedDir[1]);
+  const openAngle = angleForDir(openDir[0], openDir[1]);
+  const fo = faceOffset || [0,0];
+  const yBase = options.yBase || 0;
+
+  const group = new THREE.Group();
+  group.position.set(hx + fo[0], yBase, hz + fo[1]);
+  group.rotation.y = options.startClosed ? closedAngle : openAngle;
+  scene.add(group);
+
+  const leafMat = new THREE.MeshStandardMaterial({color:0x7a3530, roughness:0.55, metalness:0.1});
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafLen, height, 0.25), leafMat);
+  leaf.position.set(leafLen/2, height/2 + 0.6, 0);
+  leaf.castShadow = true; leaf.receiveShadow = true;
+  group.add(leaf);
+
+  const bar = new THREE.Mesh(
+    new THREE.BoxGeometry(leafLen*0.65, 0.14, 0.05),
+    new THREE.MeshStandardMaterial({color:0x2c2c2c})
+  );
+  bar.position.set(leafLen/2, height*0.42 + 0.6, 0.16);
+  group.add(bar);
+
+  if(!options.skipRegister){
+    const p = options.startClosed ? 1 : 0;
+    group.userData.role = 'firedoor';
+    group.userData.openAngle = openAngle;
+    group.userData.closedAngle = closedAngle;
+    doubleDoors.push({leafGroup:group, openAngle, closedAngle, progress:p, targetProgress:p});
+  } else if(options.role){
+    group.userData.role = options.role;
+    group.userData.openAngle = openAngle;
+    group.userData.closedAngle = closedAngle;
+  }
+  return group;
+}
+
+let fireDoorsClosed = false;
+function triggerFireDoorsList(list, closed){
+  list.forEach(d=> d.targetProgress = closed ? 1 : 0);
+}
+function updateFireDoorsList(list, dt){
+  const rate = 1/1.3; // ~1.3s pour un vantail complet
+  list.forEach(d=>{
+    if(d.progress !== d.targetProgress){
+      const dir = d.targetProgress > d.progress ? 1 : -1;
+      d.progress = THREE.MathUtils.clamp(d.progress + dir*dt*rate, 0, 1);
+      let ease = d.progress*d.progress*(3 - 2*d.progress);
+      if(dir === 1){
+        // petit battement (la porte "claque" un peu avant de se stabiliser fermée)
+        ease += 0.1*Math.sin(d.progress*Math.PI*3)*(1-d.progress);
+      }
+      d.leafGroup.rotation.y = d.openAngle + (d.closedAngle - d.openAngle)*ease;
+    }
+  });
+}
+
+function buildMainEntrance(cx, cz, width){
+  const door = new THREE.Mesh(
+    new THREE.BoxGeometry(width*0.92, WALL_H*0.85, 0.5),
+    new THREE.MeshStandardMaterial({color:0x6fa8c9, emissive:0x123244, roughness:0.4, metalness:0.1})
+  );
+  door.position.set(cx, WALL_H*0.85/2+0.6, cz);
+  door.castShadow = true;
+  door.userData.role = 'mainEntranceDoor';
+  scene.add(door);
+  // porch / exterior landing
+  buildFloorSlab(cx, cz-5, width+4, 8, 0x35506b);
+  const spr = makeLabel('ENTRÉE PRINCIPALE');
+  spr.position.set(cx, WALL_H+3, cz);
+  scene.add(spr);
+}
+
+/* Wall segment placed directly (not via buildRoom), used for the hub perimeter */
+function addWallSeg(axis, fixedVal, start, end){
+  const len = end - start;
+  if(len <= 0.05) return;
+  const center = (start+end)/2;
+  let geo, pos, halfX, halfZ, worldX, worldZ;
+  if(axis==='z'){ // wall runs along X, at fixed Z
+    geo = new THREE.BoxGeometry(len, WALL_H, WALL_T);
+    pos = [center, WALL_H/2+0.6, fixedVal];
+    halfX = len/2; halfZ = WALL_T/2;
+    worldX = center; worldZ = fixedVal;
+  } else { // wall runs along Z, at fixed X
+    geo = new THREE.BoxGeometry(WALL_T, WALL_H, len);
+    pos = [fixedVal, WALL_H/2+0.6, center];
+    halfX = WALL_T/2; halfZ = len/2;
+    worldX = fixedVal; worldZ = center;
+  }
+  const m = new THREE.Mesh(geo, wallMat);
+  m.position.set(...pos);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  registerCollider(worldX, worldZ, halfX, halfZ);
+}
+
+/* Build a perimeter wall on one hub edge, leaving gaps (doors / corridor mouths) */
+function hubWallEdge(axis, fixedVal, rangeMin, rangeMax, gaps){
+  const sorted = gaps.slice().sort((a,b)=>a.center-b.center);
+  let cursor = rangeMin;
+  sorted.forEach(g=>{
+    addWallSeg(axis, fixedVal, cursor, g.center - g.width/2);
+    cursor = g.center + g.width/2;
+  });
+  addWallSeg(axis, fixedVal, cursor, rangeMax);
+}
+
+/* ===================== DIMENSIONS ===================== */
+function oppositeSide(s){ return {N:'S', S:'N', E:'W', W:'E'}[s]; }
+const HUB_W = 44, HUB_D = 26;
+const CORR_W = 8, CORR_L = 60;
+const ROOM_W = 12;   // room size along corridor axis
+const groundFloorStartIndex = scene.children.length; // marqueur : tout ce qui est ajouté après ceci sera dupliqué à l'étage
+const ROOM_D = 14;   // room size perpendicular to corridor (depth)
+const LAT = CORR_W/2 + ROOM_D/2; // lateral offset of chambre centers from corridor axis
+const slotCenters = [0,1,2,3].map(i => (HUB_D/2) + 6 + i*ROOM_W + ROOM_W/2); // will offset per axis below
+
+const CHAMBRE_COLOR = 0xdce8f0;
+const SERVICE_COLOR = 0xe3d9c6;
+const HALL_COLOR    = 0xcdb694;
+const CORR_COLOR    = 0xc9d3da;
+
+/* ===================== HUB (HALL CENTRAL) ===================== */
+buildFloorSlab(0, 0, HUB_W, HUB_D, HALL_COLOR);
+{
+  const spr = makeLabel('HALL CENTRAL');
+  spr.position.set(0, 12, 0);
+  scene.add(spr);
+}
+
+/* Service rooms along the south face of the hub (salle de soins remplacée par l'entrée) */
+const serviceRooms = [
+  {x:-15, name:'Local rangement'},
+  {x:-5,  name:'Médecin'},
+  {x:15,  name:'Office'}
+];
+const svcZ = -(HUB_D/2) - 5; // room depth 10, center offset
+const DOOR_W_STD = 3.2;
+serviceRooms.forEach(r=>{
+  buildRoom(r.x, svcZ, 10, 10, SERVICE_COLOR, 'S', r.name, null, oppositeSide('S'));
+  addRoomNumber(r.x, 8.3, -(HUB_D/2)-0.4, r.name.toUpperCase());
+});
+
+/* 4 infirmières postées dans les locaux du hall, avant le déclenchement de
+   l'évacuation (elles iront ensuite chercher les résidents en chambre). */
+const HALL_NURSE_COLOR = 0xdfe9f2;
+const hallNursesGround = [];
+const hallNurseSpots = [
+  {x:-5,  z:svcZ-1.5}, // Médecin
+  {x:-5,  z:svcZ+1.5}, // Médecin
+  {x:15,  z:svcZ},     // Office
+  {x:-15, z:svcZ},     // Rangement
+];
+hallNurseSpots.forEach((s,i)=>{
+  hallNursesGround.push(addOccupant(s.x, s.z, 'nurse', HALL_NURSE_COLOR, i, 'hallNurse'));
+});
+
+/* Entrée principale à l'emplacement de l'ancienne salle de soins */
+const ENTRANCE_X = 5, ENTRANCE_W = 6;
+buildMainEntrance(ENTRANCE_X, -(HUB_D/2), ENTRANCE_W);
+// murs latéraux du vestibule d'entrée (est / ouest), pour qu'il ne soit pas ouvert sur les côtés
+{
+  const porchX0 = ENTRANCE_X - (ENTRANCE_W/2 + 2), porchX1 = ENTRANCE_X + (ENTRANCE_W/2 + 2);
+  const porchZ0 = -(HUB_D/2) - 1, porchZ1 = -(HUB_D/2) - 9;
+  addWallSeg('x', porchX0, porchZ1, porchZ0);
+  addWallSeg('x', porchX1, porchZ1, porchZ0);
+}
+
+/* Cloison du hall : raccorde tous les secteurs (3 ailes + locaux de service + entrée) */
+const hubX0 = -HUB_W/2, hubX1 = HUB_W/2, hubZ0 = -HUB_D/2, hubZ1 = HUB_D/2;
+hubWallEdge('z', hubZ0, hubX0-WALL_T/2, hubX1+WALL_T/2, [
+  {center:-15, width:DOOR_W_STD},
+  {center:-5,  width:DOOR_W_STD},
+  {center:ENTRANCE_X, width:ENTRANCE_W},
+  {center:15,  width:DOOR_W_STD},
+]);
+hubWallEdge('z', hubZ1, hubX0-WALL_T/2, hubX1+WALL_T/2, [{center:0, width:CORR_W}]);
+hubWallEdge('x', hubX1, hubZ0-WALL_T/2, hubZ1+WALL_T/2, [{center:0, width:CORR_W}]);
+hubWallEdge('x', hubX0, hubZ0-WALL_T/2, hubZ1+WALL_T/2, [{center:0, width:CORR_W}]);
+
+/* ===================== CORRIDORS + CHAMBRES ===================== */
+let chambreCount = 0;
+function chambreLabel(){ chambreCount++; return 'Chambre '+chambreCount; }
+
+/* Occupant statique visible dans une chambre (buildPerson est hissé plus
+   loin dans le script, mais les déclarations de fonction sont disponibles
+   dès le début grâce au hoisting). */
+function addOccupant(cx, cz, mobility, color, tagIdx, role){
+  const p = buildPerson(mobility, color);
+  p.visible = true;
+  p.position.set(cx, 0.6, cz);
+  p.rotation.y = Math.random()*Math.PI*2;
+  if(tagIdx!==undefined){ p.userData.role = role || 'northOccupant'; p.userData.idx = tagIdx; }
+  return p;
+}
+const NORTH_OCC = {
+  0:{west:{mob:'wheelchair',color:0xd68c4a}, east:{mob:'autonomous',color:0xb08cd6}},
+  1:{west:{mob:'autonomous',color:0xd6b34a}, east:{mob:'wheelchair',color:0x6f9bd6}},
+  2:{west:{mob:'walker',    color:0xc75a5a}, east:{mob:'walker',    color:0x5aa06a}},
+  3:{west:{mob:'walker',    color:0x4ab0a6}, east:{mob:'autonomous',color:0xcf6f9e}},
+};
+const northOccupantsGround = [];
+
+/* --- NORTH WING (+Z) --- */
+{
+  const startZ = HUB_D/2;
+  buildFloorSlab(0, startZ + CORR_L/2, CORR_W, CORR_L, CORR_COLOR);
+  const centers = [0,1,2,3].map(i => startZ + 6 + i*ROOM_W + ROOM_W/2);
+  let roomNum = 0;
+  centers.forEach((z,i)=>{
+    const isDemoRoom = (i===1); // "Chambre 3" : porte dynamique pour la démo pédagogique
+    buildRoom(-LAT, z, ROOM_D, ROOM_W, CHAMBRE_COLOR, 'E', null, null, oppositeSide('E'), isDemoRoom);
+    addChambreFurniture(-LAT, z, ROOM_D, ROOM_W, 'E');
+    addRoomNumber(-CORR_W/2-0.4, 8.3, z, ++roomNum);
+    northOccupantsGround.push(addOccupant(-LAT, z, NORTH_OCC[i].west.mob, NORTH_OCC[i].west.color, i*2));
+    if(isDemoRoom){
+      demoRoomZ = z;
+      const z0 = z - 1.6;
+      demoRoomDoorGround = buildSwingDoor(-CORR_W/2, z0, [0,1], [-1,0], 3.2, WALL_H*0.78, [0,0], {startClosed:true, skipRegister:true, role:'demoRoomDoor'});
+    }
+    buildRoom( LAT, z, ROOM_D, ROOM_W, CHAMBRE_COLOR, 'W', null, null, oppositeSide('W'));
+    addChambreFurniture( LAT, z, ROOM_D, ROOM_W, 'W');
+    addRoomNumber(CORR_W/2+0.4, 8.3, z, ++roomNum);
+    northOccupantsGround.push(addOccupant(LAT, z, NORTH_OCC[i].east.mob, NORTH_OCC[i].east.color, i*2+1));
+  });
+  // La porte du bout de couloir mène maintenant au bloc escalier (construit plus bas)
+
+  /* 3 volets : hall (haut) / milieu (bas) / IS (haut, contrôlé par le bouton désenfumage aile) */
+  northVolets.push(buildVolet(0, startZ + 8, false, 'high', true, 'north-0'));
+  northVolets.push(buildVolet(0, startZ + CORR_L/2, false, 'low', true, 'north-1'));
+  northVolets.push(buildVolet(0, startZ + CORR_L - 8, false, 'high', true, 'north-2'));
+}
+
+/* --- EAST WING (+X) --- */
+{
+  const startX = HUB_W/2;
+  buildFloorSlab(startX + CORR_L/2, 0, CORR_L, CORR_W, CORR_COLOR);
+  const centers = [0,1,2,3].map(i => startX + 6 + i*ROOM_W + ROOM_W/2);
+  const GENERIC_MOBS = ['autonomous','autonomous','walker','autonomous'];
+  const GENERIC_COLORS = [0xd68c4a,0x6f9bd6,0xc75a5a,0x5aa06a];
+  let roomNum = 8;
+  centers.forEach((x,i)=>{
+    buildRoom(x, -LAT, ROOM_W, ROOM_D, CHAMBRE_COLOR, 'S', null, null, oppositeSide('S'));
+    addChambreFurniture(x, -LAT, ROOM_W, ROOM_D, 'S');
+    addRoomNumber(x, 8.3, -CORR_W/2-0.4, ++roomNum);
+    addOccupant(x, -LAT, GENERIC_MOBS[i], GENERIC_COLORS[i]);
+    buildRoom(x,  LAT, ROOM_W, ROOM_D, CHAMBRE_COLOR, 'N', null, null, oppositeSide('N'));
+    addChambreFurniture(x,  LAT, ROOM_W, ROOM_D, 'N');
+    addRoomNumber(x, 8.3, CORR_W/2+0.4, ++roomNum);
+    addOccupant(x, LAT, GENERIC_MOBS[3-i], GENERIC_COLORS[3-i]);
+  });
+  // La porte du bout de couloir mène maintenant au bloc escalier (construit plus bas)
+
+  /* 3 volets : hall (haut) / milieu (bas) / IS (haut, toujours actif) */
+  buildVolet(startX + 8, 0, true, 'high');
+  buildVolet(startX + CORR_L/2, 0, true, 'low');
+  setVoletActive(buildVolet(startX + CORR_L - 8, 0, true, 'high', true), true);
+}
+/* --- WEST WING (-X) --- */
+{
+  const startX = -HUB_W/2;
+  buildFloorSlab(startX - CORR_L/2, 0, CORR_L, CORR_W, CORR_COLOR);
+  const centers = [0,1,2,3].map(i => startX - 6 - i*ROOM_W - ROOM_W/2);
+  const GENERIC_MOBS2 = ['walker','autonomous','walker','autonomous'];
+  const GENERIC_COLORS2 = [0xb08cd6,0xd6b34a,0x4ab0a6,0xcf6f9e];
+  let roomNum = 16;
+  centers.forEach((x,i)=>{
+    buildRoom(x, -LAT, ROOM_W, ROOM_D, CHAMBRE_COLOR, 'S', null, null, oppositeSide('S'));
+    addChambreFurniture(x, -LAT, ROOM_W, ROOM_D, 'S');
+    addRoomNumber(x, 8.3, -CORR_W/2-0.4, ++roomNum);
+    addOccupant(x, -LAT, GENERIC_MOBS2[i], GENERIC_COLORS2[i]);
+    buildRoom(x,  LAT, ROOM_W, ROOM_D, CHAMBRE_COLOR, 'N', null, null, oppositeSide('N'));
+    addChambreFurniture(x,  LAT, ROOM_W, ROOM_D, 'N');
+    addRoomNumber(x, 8.3, CORR_W/2+0.4, ++roomNum);
+    addOccupant(x, LAT, GENERIC_MOBS2[3-i], GENERIC_COLORS2[3-i]);
+  });
+  // La porte du bout de couloir mène maintenant au bloc escalier (construit plus bas)
+
+  /* 3 volets : hall (haut) / milieu (bas) / IS (haut, toujours actif) */
+  buildVolet(startX - 8, 0, true, 'high');
+  buildVolet(startX - CORR_L/2, 0, true, 'low');
+  setVoletActive(buildVolet(startX - CORR_L + 8, 0, true, 'high', true), true);
+}
+
+/* ===================== CLOISONS DE RACCORD ===================== */
+/* Prolonge les murs latéraux des couloirs (qui n'existent aujourd'hui
+   qu'au droit des chambres) jusqu'au hall d'un côté et jusqu'à la sortie
+   de secours de l'autre, pour que chaque aile soit un volume continu,
+   sans coupure entre le hall et les blocs. */
+const OUTER = LAT + ROOM_D/2; // écart latéral du mur extérieur des chambres
+const INNER = CORR_W/2;       // écart latéral du mur du couloir lui-même
+                               // (ce mur est parallèle au sens de circulation :
+                               //  il ferme le recoin sur le côté, sans bloquer le passage)
+
+// Bloc Nord : murs le long de Z, à x = ±OUTER et ±INNER
+[OUTER, -OUTER].forEach(x=>{
+  addWallSeg('x', x, HUB_D/2, HUB_D/2 + 6);
+  addWallSeg('x', x, HUB_D/2 + 6 + 4*ROOM_W, HUB_D/2 + CORR_L);
+});
+[INNER, -INNER].forEach(x=>{
+  addWallSeg('x', x, HUB_D/2, HUB_D/2 + 6);
+});
+
+// Locaux ménage / rangement : le rectangle entre les chambres et l'escalier
+// (bloc Nord), jusqu'ici un vide sans sol. Le local ménage (côté ouvert) sert
+// aussi de départ de feu pour le scénario.
+const NOOK_Z0 = HUB_D/2 + 6 + 4*ROOM_W, NOOK_Z1 = HUB_D/2 + CORR_L; // 67 à 73
+const NOOK_ZC = (NOOK_Z0+NOOK_Z1)/2, NOOK_D = NOOK_Z1-NOOK_Z0;
+buildFloorSlab(-(INNER+OUTER)/2, NOOK_ZC, OUTER-INNER, NOOK_D, SERVICE_COLOR); // local ménage (départ de feu)
+buildFloorSlab( (INNER+OUTER)/2, NOOK_ZC, OUTER-INNER, NOOK_D, SERVICE_COLOR); // local rangement
+
+// Portes de ces deux locaux, en jaune vif pour rester bien visibles.
+const NOOK_DOOR_W = 3.2;
+const nookDoorMat = new THREE.MeshStandardMaterial({color:0xf5c518, emissive:0x5a4200, emissiveIntensity:0.3, roughness:0.5});
+function addNookDoor(hingeX, doorZ){
+  const z0 = doorZ - NOOK_DOOR_W/2, z1 = doorZ + NOOK_DOOR_W/2;
+  addWallSeg('x', hingeX, NOOK_Z0, z0);
+  addWallSeg('x', hingeX, z1, NOOK_Z1);
+  const lintelH = WALL_H*0.15;
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, lintelH, NOOK_DOOR_W), wallMat);
+  lintel.position.set(hingeX, WALL_H*0.85 + 0.6 + lintelH/2 - 0.2, doorZ);
+  scene.add(lintel);
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.3, WALL_H*0.8, NOOK_DOOR_W*0.92), nookDoorMat);
+  leaf.position.set(hingeX, WALL_H*0.8/2 + 0.6, doorZ);
+  leaf.castShadow = true;
+  scene.add(leaf);
+}
+// Porte battante du local ménage : reste fermée normalement, s'ouvre avec le
+// départ de feu (voir le bouton "Départ de feu"). Vantail en jaune vif.
+function addMenageDoor(hingeX, doorZ, roleTag){
+  const z0 = doorZ - NOOK_DOOR_W/2, z1 = doorZ + NOOK_DOOR_W/2;
+  addWallSeg('x', hingeX, NOOK_Z0, z0);
+  addWallSeg('x', hingeX, z1, NOOK_Z1);
+  const lintelH = WALL_H*0.15;
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, lintelH, NOOK_DOOR_W), wallMat);
+  lintel.position.set(hingeX, WALL_H*0.85 + 0.6 + lintelH/2 - 0.2, doorZ);
+  scene.add(lintel);
+  const group = buildSwingDoor(hingeX, z0, [0,1], [-1,0], NOOK_DOOR_W, WALL_H*0.8, [0,0], {startClosed:false, skipRegister:true, role:roleTag});
+  group.children[0].material = nookDoorMat; // vantail jaune
+  return group;
+}
+const menageDoorGround = addMenageDoor(-INNER, NOOK_ZC, 'menageDoor');
+addNookDoor(INNER, NOOK_ZC); // local rangement (porte fixe)
+
+// Cale sous la porte du local ménage : elle est calée en position ouverte.
+{
+  const wedgeMat = new THREE.MeshStandardMaterial({color:0xf5c518, roughness:0.6});
+  const wedge = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.5, 3), wedgeMat);
+  wedge.rotation.x = Math.PI/2;
+  wedge.rotation.z = Math.PI/6;
+  wedge.position.set(-INNER - 3.0, 0.16, NOOK_ZC - 1.55);
+  wedge.castShadow = true;
+  scene.add(wedge);
+}
+
+// Meuble de rangement dans le local ménage (étagère + bidon), à l'écart du foyer.
+{
+  const shelfMat = new THREE.MeshStandardMaterial({color:0x5c6b74, roughness:0.6, metalness:0.15});
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.6, 1.0), shelfMat);
+  shelf.position.set(-(INNER+OUTER)/2 - 4, 1.8+0.6, NOOK_ZC - 2.2);
+  shelf.castShadow = true; shelf.receiveShadow = true;
+  scene.add(shelf);
+  const shelfLineMat = new THREE.MeshStandardMaterial({color:0x39444b});
+  [0.9, 1.9, 2.9].forEach(h=>{
+    const line = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.06, 1.05), shelfLineMat);
+    line.position.set(-(INNER+OUTER)/2 - 4, h+0.6, NOOK_ZC - 2.2);
+    scene.add(line);
+  });
+  const bucket = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.32, 0.7, 12),
+    new THREE.MeshStandardMaterial({color:0x2c5878, roughness:0.5})
+  );
+  bucket.position.set(-(INNER+OUTER)/2 - 4, 0.35+0.6, NOOK_ZC + 0.6);
+  bucket.castShadow = true;
+  scene.add(bucket);
+}
+
+// Bloc Est : murs le long de X, à z = ±OUTER et ±INNER
+[OUTER, -OUTER, INNER, -INNER].forEach(z=>{
+  addWallSeg('z', z, HUB_W/2, HUB_W/2 + 6);
+  addWallSeg('z', z, HUB_W/2 + 6 + 4*ROOM_W, HUB_W/2 + CORR_L);
+});
+
+// Bloc Ouest : murs le long de X, à z = ±OUTER et ±INNER (côté négatif)
+[OUTER, -OUTER, INNER, -INNER].forEach(z=>{
+  addWallSeg('z', z, -(HUB_W/2 + 6), -HUB_W/2);
+  addWallSeg('z', z, -(HUB_W/2 + CORR_L), -(HUB_W/2 + 6 + 4*ROOM_W));
+});
+
+/* ===================== CANALISATION DE VENTILATION ===================== */
+/* Un réseau de gaines qui traverse toutes les chambres en hauteur (une par
+   rangée, dans chaque aile), se rejoint dans le hall via un tronc commun,
+   avec un clapet coupe-feu rouge sur le mur de CHAQUE chambre (entre la
+   chambre et le couloir), plus un clapet de compartimentage plus gros là où
+   chaque tronc franchit la frontière couloir / hall. */
+{
+  const DUCT_Y = WALL_H - 0.6; // en hauteur, sous le plafond
+  const ductMat = new THREE.MeshStandardMaterial({color:0xb9c3cc, roughness:0.45, metalness:0.35});
+  const collarMat = new THREE.MeshStandardMaterial({color:0x173049});
+  const damperMat = new THREE.MeshStandardMaterial({color:0xd63a2c, emissive:0x3a0a06, emissiveIntensity:0.35, roughness:0.5});
+  const grilleMat = new THREE.MeshStandardMaterial({color:0x2c0f0c});
+
+  // Segment de gaine rectiligne. runAxis 'z' = le long de Z (aile Nord),
+  // 'x' = le long de X (ailes Est/Ouest). fixedCoord = position latérale.
+  function buildDuctSegment(runAxis, fixedCoord, s0, s1){
+    const len = Math.abs(s1-s0), sc = (s0+s1)/2;
+    const duct = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, len, 14), ductMat);
+    if(runAxis==='z'){ duct.rotation.x = Math.PI/2; duct.position.set(fixedCoord, DUCT_Y, sc); }
+    else { duct.rotation.z = Math.PI/2; duct.position.set(sc, DUCT_Y, fixedCoord); }
+    duct.castShadow = true;
+    scene.add(duct);
+  }
+  function buildCollar(runAxis, fixedCoord, s){
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.15, 14), collarMat);
+    if(runAxis==='z'){ collar.rotation.x = Math.PI/2; collar.position.set(fixedCoord, DUCT_Y, s); }
+    else { collar.rotation.z = Math.PI/2; collar.position.set(s, DUCT_Y, fixedCoord); }
+    scene.add(collar);
+  }
+  // Petit clapet rouge sur le mur entre une chambre et le couloir.
+  // wallAxisIsX : true si ce mur est à X fixe (aile Nord), false si à Z fixe (Est/Ouest).
+  function buildRoomDamper(wallAxisIsX, fixedCoord, along){
+    const w = wallAxisIsX ? 0.5 : 0.85, d = wallAxisIsX ? 0.85 : 0.5;
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(w, 0.85, d), damperMat);
+    if(wallAxisIsX) frame.position.set(fixedCoord, DUCT_Y, along); else frame.position.set(along, DUCT_Y, fixedCoord);
+    frame.castShadow = true;
+    scene.add(frame);
+    for(let i=0;i<2;i++){
+      const t = (i+0.5)/2 - 0.5;
+      const barGeo = wallAxisIsX ? new THREE.BoxGeometry(0.48, 0.06, 0.75) : new THREE.BoxGeometry(0.75, 0.06, 0.48);
+      const bar = new THREE.Mesh(barGeo, grilleMat);
+      if(wallAxisIsX) bar.position.set(fixedCoord, DUCT_Y+t*0.55, along); else bar.position.set(along, DUCT_Y+t*0.55, fixedCoord);
+      scene.add(bar);
+    }
+  }
+  // Gros clapet de compartimentage, là où un tronc de gaine franchit la
+  // frontière couloir / hall.
+  function buildCompartDamper(wallAxisIsX, fixedCoord, along){
+    const w = wallAxisIsX ? 0.6 : 1.0, d = wallAxisIsX ? 1.0 : 0.6;
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(w, 1.0, d), damperMat);
+    if(wallAxisIsX) frame.position.set(fixedCoord, DUCT_Y, along); else frame.position.set(along, DUCT_Y, fixedCoord);
+    frame.castShadow = true;
+    scene.add(frame);
+    for(let i=0;i<3;i++){
+      const t = (i+0.5)/3 - 0.5;
+      const barGeo = wallAxisIsX ? new THREE.BoxGeometry(0.55, 0.07, 0.9) : new THREE.BoxGeometry(0.9, 0.07, 0.55);
+      const bar = new THREE.Mesh(barGeo, grilleMat);
+      if(wallAxisIsX) bar.position.set(fixedCoord, DUCT_Y+t*0.65, along); else bar.position.set(along, DUCT_Y+t*0.65, fixedCoord);
+      scene.add(bar);
+    }
+  }
+
+  // Construit les 2 gaines (une par rangée de chambres) d'une aile, avec un
+  // clapet par chambre, un tronc vers le hall et son clapet de compartimentage.
+  function buildWingVentilation(runAxis, hubBoundary, dir, roomCenters, lat, inner){
+    const s0 = hubBoundary, s1 = hubBoundary + dir*(6 + 4*ROOM_W);
+    [-1, 1].forEach(side=>{
+      const rowCoord = side*lat;
+      const innerCoord = side*inner;
+      buildDuctSegment(runAxis, rowCoord, s0, s1);
+      roomCenters.forEach(c=>{
+        buildCollar(runAxis, rowCoord, c);
+        buildRoomDamper(runAxis==='z', innerCoord, c);
+      });
+    });
+    // connecteur latéral + tronc vers le centre du hall
+    buildDuctSegment(runAxis==='z' ? 'x' : 'z', hubBoundary, -lat, lat);
+    if(runAxis==='z') buildDuctSegment('z', 0, 0, hubBoundary);
+    else buildDuctSegment('x', 0, 0, hubBoundary);
+    buildCompartDamper(runAxis==='z', 0, hubBoundary);
+
+    // Raccord visible entre le tronc (côté hall) et la traverse des chambres,
+    // juste après le clapet (côté hall du mur de compartimentage).
+    const junction = new THREE.Mesh(new THREE.BoxGeometry(0.75,0.75,0.75), ductMat);
+    const jOffset = hubBoundary - dir*0.55;
+    if(runAxis==='z') junction.position.set(0, DUCT_Y, jOffset);
+    else junction.position.set(jOffset, DUCT_Y, 0);
+    junction.castShadow = true;
+    scene.add(junction);
+  }
+
+  const northCenters = [0,1,2,3].map(i => HUB_D/2 + 6 + i*ROOM_W + ROOM_W/2);
+  buildWingVentilation('z', HUB_D/2, 1, northCenters, LAT, INNER);
+
+  const eastCenters = [0,1,2,3].map(i => HUB_W/2 + 6 + i*ROOM_W + ROOM_W/2);
+  buildWingVentilation('x', HUB_W/2, 1, eastCenters, LAT, INNER);
+
+  const westCenters = [0,1,2,3].map(i => -HUB_W/2 - 6 - i*ROOM_W - ROOM_W/2);
+  buildWingVentilation('x', -HUB_W/2, -1, westCenters, LAT, INNER);
+
+  // Manifold central dans le hall, là où les 3 troncs se rejoignent
+  const manifold = new THREE.Mesh(new THREE.BoxGeometry(1.3,1.3,1.3), ductMat);
+  manifold.position.set(0, DUCT_Y, 0);
+  manifold.castShadow = true;
+  scene.add(manifold);
+}
+
+/* Petit repère rond rouge, en bas à droite de la fenêtre de la chambre en
+   position 2 depuis l'escalier — reporté sur les 2 rangées des 3 ailes. */
+function addWindowMarker(px, py, pz, faceAxisIsX){
+  const marker = new THREE.Mesh(
+    new THREE.CircleGeometry(0.22, 20),
+    new THREE.MeshBasicMaterial({color:0xe6483a, side:THREE.DoubleSide})
+  );
+  if(faceAxisIsX) marker.rotation.y = Math.PI/2;
+  marker.position.set(px, py, pz);
+  scene.add(marker);
+}
+{
+  const markerY = 3.9;
+  // Bloc Nord : mur extérieur à x = ±(LAT+ROOM_D/2), rangées le long de Z
+  {
+    const zCenters = [0,1,2,3].map(i => HUB_D/2 + 6 + i*ROOM_W + ROOM_W/2);
+    const z2 = zCenters[2]; // position 2 depuis l'escalier
+    const wallOut = LAT + ROOM_D/2;
+    addWindowMarker(-wallOut + 0.12, markerY, z2 + 1.6, true); // rangée ouest
+    addWindowMarker( wallOut - 0.12, markerY, z2 + 1.6, true); // rangée est
+  }
+  // Bloc Est : mur extérieur à z = ±(LAT+ROOM_D/2), rangées le long de X
+  {
+    const xCenters = [0,1,2,3].map(i => HUB_W/2 + 6 + i*ROOM_W + ROOM_W/2);
+    const x2 = xCenters[2];
+    const wallOut = LAT + ROOM_D/2;
+    addWindowMarker(x2 + 1.6, markerY, -wallOut + 0.12, false); // rangée sud
+    addWindowMarker(x2 + 1.6, markerY,  wallOut - 0.12, false); // rangée nord
+  }
+  // Bloc Ouest : mur extérieur à z = ±(LAT+ROOM_D/2), rangées le long de X (négatif)
+  {
+    const xCenters = [0,1,2,3].map(i => -HUB_W/2 - 6 - i*ROOM_W - ROOM_W/2);
+    const x2 = xCenters[2];
+    const wallOut = LAT + ROOM_D/2;
+    addWindowMarker(x2 + 1.6, markerY, -wallOut + 0.12, false); // rangée sud
+    addWindowMarker(x2 + 1.6, markerY,  wallOut - 0.12, false); // rangée nord
+  }
+}
+
+/* ===================== PORTES COUPE-FEU BATTANTES ===================== */
+/* Une porte à deux vantaux à l'entrée de chaque couloir, côté hall.
+   Elles démarrent ouvertes (repliées contre le mur, dans le hall) et
+   se ferment avec une animation via le bouton dédié. */
+const DOOR_LEAF_LEN = CORR_W/2, DOOR_H = 8.6;
+
+// Bloc Nord (ouverture en z = HUB_D/2, x de -4 à 4) — replis vers le couloir (+Z)
+buildSwingDoor(-INNER, HUB_D/2, [1,0], [0,1], DOOR_LEAF_LEN, DOOR_H, [0, 0.35]);
+buildSwingDoor( INNER, HUB_D/2, [-1,0], [0,1], DOOR_LEAF_LEN, DOOR_H, [0, 0.35]);
+
+// Bloc Est (ouverture en x = HUB_W/2, z de -4 à 4) — replis vers le couloir (+X)
+buildSwingDoor(HUB_W/2, -INNER, [0,1], [1,0], DOOR_LEAF_LEN, DOOR_H, [0.35, 0]);
+buildSwingDoor(HUB_W/2,  INNER, [0,-1], [1,0], DOOR_LEAF_LEN, DOOR_H, [0.35, 0]);
+
+// Bloc Ouest (ouverture en x = -HUB_W/2, z de -4 à 4) — replis vers le couloir (-X)
+buildSwingDoor(-HUB_W/2, -INNER, [0,1], [-1,0], DOOR_LEAF_LEN, DOOR_H, [-0.35, 0]);
+buildSwingDoor(-HUB_W/2,  INNER, [0,-1], [-1,0], DOOR_LEAF_LEN, DOOR_H, [-0.35, 0]);
+
+// Façades du bout de chaque couloir (côté issue de secours) : mur plein
+// de part et d'autre de la porte, pour fermer complètement les recoins.
+addWallSeg('z', HUB_D/2 + CORR_L, -OUTER, -INNER);
+addWallSeg('z', HUB_D/2 + CORR_L,  INNER,  OUTER);
+addWallSeg('x', HUB_W/2 + CORR_L, -OUTER, -INNER);
+addWallSeg('x', HUB_W/2 + CORR_L,  INNER,  OUTER);
+addWallSeg('x', -(HUB_W/2 + CORR_L), -OUTER, -INNER);
+addWallSeg('x', -(HUB_W/2 + CORR_L),  INNER,  OUTER);
+
+// Cloison pleine au-dessus de chaque porte coupe-feu, pour que la porte
+// fermée bloque réellement le passage de la fumée (sinon la fumée passerait
+// par l'espace resté ouvert entre le haut du vantail et le plafond).
+function addDoorLintel(axis, fixedVal, start, end){
+  const lintelH = WALL_H - DOOR_H;
+  const len = end - start, center = (start+end)/2;
+  const geo = axis==='z' ? new THREE.BoxGeometry(len, lintelH, WALL_T) : new THREE.BoxGeometry(WALL_T, lintelH, len);
+  const m = new THREE.Mesh(geo, wallMat);
+  if(axis==='z') m.position.set(center, DOOR_H + lintelH/2 + 0.6, fixedVal);
+  else m.position.set(fixedVal, DOOR_H + lintelH/2 + 0.6, center);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+}
+addDoorLintel('z', HUB_D/2, -INNER, INNER);
+addDoorLintel('x', HUB_W/2, -INNER, INNER);
+addDoorLintel('x', -HUB_W/2, -INNER, INNER);
+
+/* ===================== DUPLICATION DE L'ÉTAGE ===================== */
+/* Tout ce qui a été construit depuis groundFloorStartIndex (hall, ailes,
+   chambres, cloisons, portes coupe-feu...) est regroupé puis dupliqué
+   à la hauteur de l'étage. Les éléments animés (fumée, portes, ventilateurs)
+   ne sont pilotés que pour le rez-de-chaussée pour l'instant. */
+const FLOOR_H = WALL_H + 1.4; // hauteur entre le rez-de-chaussée et l'étage
+const groundFloorObjects = scene.children.slice(groundFloorStartIndex);
+const groundFloorGroup = new THREE.Group();
+groundFloorObjects.forEach(o => groundFloorGroup.add(o));
+scene.add(groundFloorGroup);
+const firstFloorGroup = groundFloorGroup.clone(true);
+firstFloorGroup.position.y = FLOOR_H;
+scene.add(firstFloorGroup);
+// Réenregistre les plafonds clonés de l'étage pour le mode visite
+firstFloorGroup.traverse(o=>{ if(o.material === ceilingMat) ceilingMeshes.push(o); });
+
+// Retrouve les portes coupe-feu du hall et le volet Nord clonés à l'étage,
+// pour pouvoir les piloter indépendamment du rez-de-chaussée.
+const doubleDoorsFloor2 = [];
+let northVoletsFloor2 = [null, null, null];
+let menageDoorFloor2 = null;
+const northOccupantsFloor2 = [];
+const hallNursesFloor2 = [];
+firstFloorGroup.traverse(o=>{
+  if(o.userData && o.userData.role === 'northOccupant'){
+    northOccupantsFloor2.push(o);
+  }
+  if(o.userData && o.userData.role === 'hallNurse'){
+    hallNursesFloor2.push(o);
+  }
+  if(o.userData && o.userData.role === 'firedoor'){
+    doubleDoorsFloor2.push({leafGroup:o, openAngle:o.userData.openAngle, closedAngle:o.userData.closedAngle, progress:0, targetProgress:0});
+  }
+  if(o.userData && o.userData.role === 'menageDoor'){
+    menageDoorFloor2 = o;
+  }
+  if(o.userData && o.userData.role === 'demoRoomDoor'){
+    demoRoomDoorFloor2 = o;
+  }
+  if(o.userData && typeof o.userData.voletKey === 'string' && o.userData.voletKey.indexOf('north-') === 0){
+    const idx = parseInt(o.userData.voletKey.split('-')[1], 10);
+    northVoletsFloor2[idx] = northVoletsFloor2[idx] || {};
+    if(o.userData.isVoletPanel){
+      o.material = o.material.clone(); // matériau propre à l'étage (sinon partagé avec le RDC)
+      northVoletsFloor2[idx].panelMat = o.material;
+    }
+    if(o.userData.isFanSpinner){
+      northVoletsFloor2[idx].spinner = o;
+      activeFans.push(o); // participe à la boucle de rotation (tourne seulement si userData.spinning)
+    }
+    if(o.userData.isVoletFlap){
+      northVoletsFloor2[idx].flap = o;
+      voletFlaps.push({group:o, axis:o.userData.flapAxis, openAngle:o.userData.flapOpenAngle, progress:0, targetProgress:0});
+    }
+  }
+});
+northVoletsFloor2 = northVoletsFloor2.filter(Boolean);
+
+// Pas de porte d'entrée à l'étage : on la retire et on mure l'ouverture.
+// (on collecte d'abord, puis on retire après coup : modifier l'arbre pendant
+// un traverse() casse l'itération de three.js)
+const entranceDoorsFloor2 = [];
+firstFloorGroup.traverse(o=>{
+  if(o.userData && o.userData.role === 'mainEntranceDoor') entranceDoorsFloor2.push(o);
+});
+entranceDoorsFloor2.forEach(o=>{
+  o.visible = false;
+  if(o.parent) o.parent.remove(o);
+});
+addWallSegY('z', -(HUB_D/2), ENTRANCE_X - ENTRANCE_W/2, ENTRANCE_X + ENTRANCE_W/2, FLOOR_H, WALL_H);
+
+/* ===================== BLOCS ESCALIER ===================== */
+/* Un bloc escalier par aile, construit une seule fois (il traverse déjà
+   les deux niveaux). La porte coupe-feu du bout de couloir mène dedans ;
+   un escalier à deux volées (avec palier intermédiaire) relie le
+   rez-de-chaussée à l'étage, en ressortant exactement à l'aplomb de la
+   porte du couloir de l'étage. Chaque bloc a sa propre issue de secours
+   extérieure au rez-de-chaussée. */
+function addWallSegY(axis, fixedVal, start, end, yBase, height){
+  const len = end - start;
+  if(len <= 0.05) return;
+  const center = (start+end)/2;
+  let geo, pos, halfX, halfZ, worldX, worldZ;
+  if(axis==='z'){
+    geo = new THREE.BoxGeometry(len, height, WALL_T);
+    pos = [center, yBase + height/2, fixedVal];
+    halfX = len/2; halfZ = WALL_T/2; worldX = center; worldZ = fixedVal;
+  } else {
+    geo = new THREE.BoxGeometry(WALL_T, height, len);
+    pos = [fixedVal, yBase + height/2, center];
+    halfX = WALL_T/2; halfZ = len/2; worldX = fixedVal; worldZ = center;
+  }
+  const m = new THREE.Mesh(geo, wallMat);
+  m.position.set(...pos);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  if(yBase < 1) registerCollider(worldX, worldZ, halfX, halfZ);
+}
+function buildLandingSlab(cx, cz, w, d, y, color){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.4, d), new THREE.MeshStandardMaterial({color, roughness:0.9}));
+  m.position.set(cx, y + 0.2, cz);
+  m.receiveShadow = true; m.castShadow = true;
+  scene.add(m);
+}
+const stairMat = new THREE.MeshStandardMaterial({color:0xb7c2cc, roughness:0.85});
+function buildStairFlight(runAxis, laneCoord, runStart, runDir, yBase, riseTotal, runTotal, steps, width){
+  const stepRise = riseTotal/steps, stepRun = runTotal/steps;
+  for(let i=0;i<steps;i++){
+    const h = stepRise*(i+1);
+    const rA = runStart + runDir*stepRun*i, rB = runStart + runDir*stepRun*(i+1);
+    const rc = (rA+rB)/2, rlen = Math.abs(rB-rA);
+    let geo, pos;
+    if(runAxis==='z'){ geo = new THREE.BoxGeometry(width, h, rlen); pos=[laneCoord, yBase+h/2, rc]; }
+    else { geo = new THREE.BoxGeometry(rlen, h, width); pos=[rc, yBase+h/2, laneCoord]; }
+    const box = new THREE.Mesh(geo, stairMat);
+    box.position.set(...pos);
+    box.castShadow = true; box.receiveShadow = true;
+    scene.add(box);
+  }
+}
+
+function buildStaircaseBlock(runAxis, doorCoord, fixedCoord, dir, wingLabel, doorStartOpen){
+  // runAxis: 'z' (bloc Nord) ou 'x' (blocs Est/Ouest) — axe le long duquel le bloc s'étend
+  // doorCoord: position de la porte existante sur l'axe "run" (ex: z=73 pour le Nord)
+  // fixedCoord: position sur l'axe perpendiculaire (0 pour tous, couloirs centrés)
+  // dir: +1 ou -1, sens dans lequel le bloc s'étend depuis la porte
+  const BLOCK_RUN = 16, HALF_W = 6;
+  const r0 = doorCoord, r1 = doorCoord + dir*BLOCK_RUN;
+  const rMin = Math.min(r0,r1), rMax = Math.max(r0,r1);
+  const rc = (rMin+rMax)/2;
+
+  // Dalle de sol au rez-de-chaussée, sur toute la profondeur du bloc
+  if(runAxis==='z') buildLandingSlab(fixedCoord, rc, HALF_W*2, BLOCK_RUN, 0, CORR_COLOR);
+  else buildLandingSlab(rc, fixedCoord, BLOCK_RUN, HALF_W*2, 0, CORR_COLOR);
+
+  // Murs latéraux (rez-de-chaussée + étage)
+  const laneA = fixedCoord - HALF_W, laneB = fixedCoord + HALF_W;
+  const sideAxis = runAxis==='z' ? 'x' : 'z';
+  [laneA, laneB].forEach(l=>{
+    addWallSegY(sideAxis, l, rMin, rMax, 0, WALL_H);
+    addWallSegY(sideAxis, l, rMin, rMax, FLOOR_H, WALL_H);
+  });
+
+  // Mur du fond : ouverture porte au rez-de-chaussée, plein à l'étage
+  const farCoord = r1;
+  addWallSegY(runAxis, farCoord, laneA, fixedCoord-CORR_W/2, 0, WALL_H);
+  addWallSegY(runAxis, farCoord, fixedCoord+CORR_W/2, laneB, 0, WALL_H);
+  addWallSegY(runAxis, farCoord, laneA, laneB, FLOOR_H, WALL_H);
+
+  // Issue de secours extérieure (rez-de-chaussée uniquement)
+  buildExitDoor(
+    runAxis==='z' ? fixedCoord : farCoord + dir*1,
+    runAxis==='z' ? farCoord + dir*1 : fixedCoord,
+    runAxis==='z', 'ISSUE DE SECOURS'
+  );
+
+  // Porte(s) entre couloir et escalier : fermées en temps normal (rez-de-chaussée + étage),
+  // sauf si doorStartOpen est vrai (une aile laissée ouverte, ex. celle du départ de feu).
+  const hingeA = fixedCoord - CORR_W/2, hingeB = fixedCoord + CORR_W/2;
+  const doorLeafLen = CORR_W/2;
+  const startClosed = !doorStartOpen;
+  [0, FLOOR_H].forEach(yb=>{
+    let d1, d2;
+    if(runAxis==='z'){
+      d1 = buildSwingDoor(hingeA, doorCoord, [1,0], [0,dir], doorLeafLen, WALL_H*0.86, [0, dir*0.35], {startClosed, yBase:yb, skipRegister:true, role:'stairdoor'});
+      d2 = buildSwingDoor(hingeB, doorCoord, [-1,0], [0,dir], doorLeafLen, WALL_H*0.86, [0, dir*0.35], {startClosed, yBase:yb, skipRegister:true, role:'stairdoor'});
+    } else {
+      d1 = buildSwingDoor(doorCoord, hingeA, [0,1], [dir,0], doorLeafLen, WALL_H*0.86, [dir*0.35, 0], {startClosed, yBase:yb, skipRegister:true, role:'stairdoor'});
+      d2 = buildSwingDoor(doorCoord, hingeB, [0,-1], [dir,0], doorLeafLen, WALL_H*0.86, [dir*0.35, 0], {startClosed, yBase:yb, skipRegister:true, role:'stairdoor'});
+    }
+    if(wingLabel==='Nord' && yb===FLOOR_H){
+      [d1,d2].forEach(d=>{
+        northStairDoorsFloor2.push({leafGroup:d, openAngle:d.userData.openAngle, closedAngle:d.userData.closedAngle, progress:1, targetProgress:1});
+      });
+    }
+  });
+
+  // Escalier à deux volées avec palier intermédiaire
+  const laneUp = fixedCoord - 2.5, laneDown = fixedCoord + 2.5;
+  const r2 = doorCoord + dir*2;   // fin du palier d'entrée
+  const r3 = doorCoord + dir*8;   // fin de la 1ère volée
+  const r4 = doorCoord + dir*11;  // fin du palier intermédiaire
+  const r5 = doorCoord + dir*5;   // fin de la 2e volée (revient près de la porte)
+
+  buildStairFlight(runAxis, laneUp, r2, dir, 0, FLOOR_H/2, 6, 9, 3);            // volée 1 : monte
+  if(runAxis==='z') buildLandingSlab(fixedCoord, (r3+r4)/2, HALF_W*2, Math.abs(r4-r3), FLOOR_H/2, CORR_COLOR);
+  else buildLandingSlab((r3+r4)/2, fixedCoord, Math.abs(r4-r3), HALF_W*2, FLOOR_H/2, CORR_COLOR);
+  buildStairFlight(runAxis, laneDown, r4, -dir, FLOOR_H/2, FLOOR_H/2, 6, 9, 3); // volée 2 : redescend le "run", monte en hauteur
+  if(runAxis==='z') buildLandingSlab(fixedCoord, (doorCoord+r5)/2, HALF_W*2, Math.abs(r5-doorCoord), FLOOR_H, CORR_COLOR);
+  else buildLandingSlab((doorCoord+r5)/2, fixedCoord, Math.abs(r5-doorCoord), HALF_W*2, FLOOR_H, CORR_COLOR);
+
+  // Plafond du bloc (hauteur totale), masqué sauf en mode visite
+  const ceil = new THREE.Mesh(new THREE.BoxGeometry(runAxis==='z'?HALF_W*2:BLOCK_RUN, 0.4, runAxis==='z'?BLOCK_RUN:HALF_W*2), ceilingMat);
+  ceil.position.set(runAxis==='z'?fixedCoord:rc, FLOOR_H+WALL_H+0.6, runAxis==='z'?rc:fixedCoord);
+  ceil.visible = false;
+  scene.add(ceil);
+  ceilingMeshes.push(ceil);
+}
+
+buildStaircaseBlock('z', HUB_D/2 + CORR_L, 0, 1, 'Nord');
+buildStaircaseBlock('x', HUB_W/2 + CORR_L, 0, 1, 'Est');
+buildStaircaseBlock('x', -(HUB_W/2 + CORR_L), 0, -1, 'Ouest');
+
+/**
+ * Exutoire de désenfumage naturel en toiture, au-dessus de l'escalier.
+ * Trappe à charnière qui bascule vers le haut pour s'ouvrir.
+ */
+let exutoireHinge = null, exutoireProgress = 0, exutoireTarget = 0;
+function buildExutoire(cx, cz, roofY){
+  const hatchW = 3.6, hatchD = 3.6;
+  const curb = new THREE.Mesh(
+    new THREE.BoxGeometry(hatchW+0.3, 0.3, hatchD+0.3),
+    new THREE.MeshStandardMaterial({color:0x173049, roughness:0.6})
+  );
+  curb.position.set(cx, roofY+0.15, cz);
+  scene.add(curb);
+
+  const hinge = new THREE.Group();
+  hinge.position.set(cx - hatchW/2, roofY+0.3, cz);
+  scene.add(hinge);
+
+  const flap = new THREE.Mesh(
+    new THREE.BoxGeometry(hatchW, 0.12, hatchD),
+    new THREE.MeshStandardMaterial({color:0x4fb8e8, emissive:0x0d3a52, emissiveIntensity:0, roughness:0.5})
+  );
+  flap.position.set(hatchW/2, 0, 0);
+  flap.castShadow = true;
+  hinge.add(flap);
+
+  exutoireHinge = hinge;
+}
+function triggerExutoire(){
+  exutoireTarget = exutoireTarget ? 0 : 1;
+  return !!exutoireTarget;
+}
+function updateExutoire(dt){
+  if(!exutoireHinge || exutoireProgress === exutoireTarget) return;
+  const dir = exutoireTarget > exutoireProgress ? 1 : -1;
+  exutoireProgress = THREE.MathUtils.clamp(exutoireProgress + dir*dt*0.8, 0, 1);
+  const ease = exutoireProgress*exutoireProgress*(3-2*exutoireProgress);
+  exutoireHinge.rotation.z = ease * Math.PI*0.55;
+  exutoireHinge.children[0].material.emissiveIntensity = ease*0.7;
+}
+// Installé sur l'escalier du bloc Nord (aile du départ de feu)
+buildExutoire(0, HUB_D/2 + CORR_L + 8, FLOOR_H + WALL_H + 0.6);
+
+/**
+ * Tourelle d'extraction de désenfumage en toiture, posée au-dessus d'un
+ * volet en partie haute (représente le caisson d'extraction + le rejet
+ * en toiture, en bout du conduit qui descend jusqu'au volet).
+ */
+const roofTurretFans = [];
+function buildRoofTurret(cx, cz, roofY){
+  const baseW = 2.2, baseH = 1.4, riserH = 1.8;
+  const turretMat = new THREE.MeshStandardMaterial({color:0x2c5878, roughness:0.6});
+  const louverMat = new THREE.MeshStandardMaterial({color:0x173049, roughness:0.7});
+
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(baseW+0.3, 0.15, baseW+0.3), louverMat);
+  plinth.position.set(cx, roofY+0.08, cz);
+  scene.add(plinth);
+
+  // conduit vertical qui surélève la tourelle au-dessus du toit
+  const riser = new THREE.Mesh(new THREE.BoxGeometry(baseW*0.6, riserH, baseW*0.6), louverMat);
+  riser.position.set(cx, roofY+0.15+riserH/2, cz);
+  riser.castShadow = true;
+  scene.add(riser);
+
+  const turretBaseY = roofY + 0.15 + riserH;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(baseW, baseH, baseW), turretMat);
+  base.position.set(cx, turretBaseY+baseH/2, cz);
+  base.castShadow = true;
+  scene.add(base);
+
+  for(let i=0;i<3;i++){
+    const t = (i+0.5)/3 - 0.5;
+    [1,-1].forEach(side=>{
+      const l = new THREE.Mesh(new THREE.BoxGeometry(baseW*0.88, 0.09, 0.05), louverMat);
+      l.position.set(cx, turretBaseY+baseH*0.5+t*baseH*0.75, cz + side*(baseW/2+0.03));
+      scene.add(l);
+      const l2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, baseW*0.88), louverMat);
+      l2.position.set(cx + side*(baseW/2+0.03), turretBaseY+baseH*0.5+t*baseH*0.75, cz);
+      scene.add(l2);
+    });
+  }
+
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(baseW*0.66, baseW*0.74, 0.28, 12),
+    new THREE.MeshStandardMaterial({color:0x0e2438, roughness:0.5})
+  );
+  cap.position.set(cx, turretBaseY+baseH+0.14, cz);
+  scene.add(cap);
+
+  const fanCowl = new THREE.Group();
+  fanCowl.position.set(cx, turretBaseY+baseH+0.34, cz);
+  scene.add(fanCowl);
+  const cowlDisc = new THREE.Mesh(
+    new THREE.CylinderGeometry(baseW*0.4, baseW*0.4, 0.07, 10),
+    new THREE.MeshStandardMaterial({color:0x4fb8e8, emissive:0x000000, emissiveIntensity:0, roughness:0.4})
+  );
+  fanCowl.add(cowlDisc);
+  const cowlBlade = new THREE.Mesh(new THREE.BoxGeometry(baseW*0.72, 0.05, 0.1), new THREE.MeshStandardMaterial({color:0xdfe9f2}));
+  fanCowl.add(cowlBlade);
+  const cowlBlade2 = cowlBlade.clone(); cowlBlade2.rotation.y = Math.PI/2; fanCowl.add(cowlBlade2);
+  fanCowl.userData.disc = cowlDisc;
+  roofTurretFans.push(fanCowl);
+  return fanCowl;
+}
+
+const ROOF_Y = FLOOR_H + WALL_H + 0.6;
+// Bloc Nord
+buildRoofTurret(0, HUB_D/2 + 8, ROOF_Y);
+const northTurretFan = buildRoofTurret(0, HUB_D/2 + CORR_L - 8, ROOF_Y);
+// Bloc Est
+buildRoofTurret(HUB_W/2 + 8, 0, ROOF_Y);
+const eastTurretFan = buildRoofTurret(HUB_W/2 + CORR_L - 8, 0, ROOF_Y);
+// Bloc Ouest
+buildRoofTurret(-HUB_W/2 - 8, 0, ROOF_Y);
+const westTurretFan = buildRoofTurret(-(HUB_W/2 + CORR_L - 8), 0, ROOF_Y);
+
+/* Volets de désenfumage du hall (purement esthétiques), montés sur le mur
+   est du hall, + une tourelle d'extraction en toiture au-dessus du volet
+   haut, dans le même style que celles des couloirs. */
+function buildHallVolet(px, pz, level, yOffset){
+  const panelW = 0.25, panelD = 2.6;
+  const panelH = level==='high' ? 2.0 : 1.7;
+  const centerY = (yOffset||0) + (level==='high' ? (WALL_H - 1.2) : (panelH/2 + 0.6));
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(panelW, panelH, panelD),
+    new THREE.MeshStandardMaterial({color:0x2c5878, roughness:0.5})
+  );
+  m.position.set(px, centerY, pz);
+  m.castShadow = true;
+  scene.add(m);
+}
+const HALL_VOLET_X = HUB_W/2 - 0.25;
+[0, FLOOR_H].forEach(yOffset=>{
+  buildHallVolet(HALL_VOLET_X, 8, 'low', yOffset);
+  buildHallVolet(HALL_VOLET_X, -8, 'high', yOffset);
+});
+buildRoofTurret(HUB_W/2 - 4, -8, ROOF_Y);
+
+/* ===================== ÉVACUATION DES RÉSIDENTS ===================== */
+/* Figurines stylisées (pas de personnages détaillés) qui évacuent l'aile
+   Nord de l'étage : 8 résidents (2 fauteuil roulant, 3 déambulateur,
+   3 autonomes) + 4 infirmières. La plupart partent vers le hall puis
+   l'aile Est (évacuation horizontale vers une zone protégée) ; 2 résidents
+   accompagnés descendent par l'escalier. */
+const evacuees = [];
+function buildPerson(mobility, uniformColor){
+  const g = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({color:0xd9a678, roughness:0.7});
+  const cloth = new THREE.MeshStandardMaterial({color:uniformColor, roughness:0.6});
+  const seated = mobility==='wheelchair';
+  const bodyH = seated ? 0.55 : 0.95;
+  const bodyY = seated ? 0.55 : 0.75;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.24,bodyH,8), cloth);
+  body.position.y = bodyY;
+  body.castShadow = true;
+  g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22,10,8), skin);
+  head.position.y = bodyY + bodyH/2 + 0.22;
+  g.add(head);
+
+  if(mobility==='wheelchair'){
+    const wcMat = new THREE.MeshStandardMaterial({color:0x333333, roughness:0.5});
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.06,0.5), wcMat);
+    seat.position.y = 0.3; g.add(seat);
+    [-0.26,0.26].forEach(wx=>{
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.26,0.04,6,14), wcMat);
+      wheel.rotation.y = Math.PI/2;
+      wheel.position.set(wx,0.26,-0.05);
+      g.add(wheel);
+    });
+  }
+  if(mobility==='walker'){
+    const wMat = new THREE.MeshStandardMaterial({color:0xc0c8cf, metalness:0.4, roughness:0.4});
+    const frame = new THREE.Group();
+    frame.position.set(0,0,-0.42);
+    [-0.22,0.22].forEach(wx=>{
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.5,6), wMat);
+      leg.position.set(wx,0.25,0);
+      frame.add(leg);
+    });
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.46,0.03,0.03), wMat);
+    bar.position.set(0,0.5,0);
+    frame.add(bar);
+    g.add(frame);
+  }
+  g.scale.setScalar(4); // proportionné à la hauteur d'une porte (~8,5 unités)
+  scene.add(g);
+  g.visible = false;
+  return g;
+}
+
+function pointOnPath3D(path, segLens, totalLen, t){
+  let target = t*totalLen;
+  for(let i=0;i<segLens.length;i++){
+    if(target<=segLens[i] || i===segLens.length-1){
+      const segT = segLens[i]>0 ? Math.min(1,target/segLens[i]) : 1;
+      const p0=path[i], p1=path[i+1];
+      return [p0[0]+(p1[0]-p0[0])*segT, p0[1]+(p1[1]-p0[1])*segT, p0[2]+(p1[2]-p0[2])*segT];
+    }
+    target -= segLens[i];
+  }
+  return path[path.length-1];
+}
+function addEvacuee(mobility, uniformColor, path, speed, delay){
+  const group = buildPerson(mobility, uniformColor);
+  const segLens = [];
+  for(let i=1;i<path.length;i++){
+    const a=path[i-1], b=path[i];
+    segLens.push(Math.hypot(b[0]-a[0], b[1]-a[1], b[2]-a[2]));
+  }
+  const totalLen = segLens.reduce((a,b)=>a+b,0);
+  const e = {group, path, segLens, totalLen, t:-delay, delay, speed, arrived:false};
+  evacuees.push(e);
+  return e;
+}
+
+const EVAC_Y = FLOOR_H + 0.6;                 // niveau du sol, à l'étage
+const NURSE_COLOR = 0xdfe9f2, RESIDENT_COLORS = [0xd68c4a,0x6f9bd6,0xc75a5a,0x5aa06a,0xb08cd6,0xd6b34a,0x4ab0a6,0xcf6f9e];
+const doorZ = [0,1,2,3].map(i => HUB_D/2 + 6 + i*ROOM_W + ROOM_W/2); // 25,37,49,61
+
+// Points de passage communs
+const HUB_C = [0, EVAC_Y, 0];
+const EAST_SAFE = [30, EVAC_Y, 4];             // zone sûre, aile Est
+function fromDoor(x, z){ return [x, EVAC_Y, z]; }
+function corridorPt(z){ return [0, EVAC_Y, z]; }
+
+// --- Résidents évacués vers le hall puis l'aile Est ---
+// (nom, mobilité, x du couloir de départ [±4], z de la chambre, couleur, vitesse)
+const toEast = [
+  {x:-4, z:doorZ[0], mob:'wheelchair', speed:1.3, color:RESIDENT_COLORS[0]}, // ouest, fauteuil (poussé)
+  {x: 4, z:doorZ[1], mob:'wheelchair', speed:1.3, color:RESIDENT_COLORS[1]}, // est, fauteuil (poussé)
+  {x:-4, z:doorZ[2], mob:'walker',     speed:1.7, color:RESIDENT_COLORS[2]},
+  {x: 4, z:doorZ[2], mob:'walker',     speed:1.7, color:RESIDENT_COLORS[3]},
+  {x: 4, z:doorZ[0], mob:'autonomous', speed:2.4, color:RESIDENT_COLORS[4]},
+  {x:-4, z:doorZ[1], mob:'autonomous', speed:2.4, color:RESIDENT_COLORS[5]},
+];
+toEast.forEach((r,i)=>{
+  const path = [fromDoor(r.x,r.z), corridorPt(r.z), corridorPt(HUB_D/2+2), HUB_C, EAST_SAFE];
+  addEvacuee(r.mob, r.color, path, r.speed, i*0.9);
+});
+// Infirmières qui poussent les 2 fauteuils (même trajet, léger décalage) —
+// elles partent du local Médecin, traversent le hall, entrent dans le
+// couloir puis DANS la chambre pour en sortir le résident, avant de
+// continuer ensemble vers l'aile Est.
+[toEast[0], toEast[1]].forEach((r,i)=>{
+  const off = i===0 ? -0.6 : 0.6;
+  const hallStart = [-5, EVAC_Y, svcZ + (i===0?-1.5:1.5)];
+  const roomSign = r.x < 0 ? -1 : 1;
+  const doorPt = fromDoor(r.x+off, r.z);
+  const roomInterior = [roomSign*(LAT-2), EVAC_Y, r.z];
+  const path = [
+    hallStart, HUB_C, corridorPt(r.z),
+    doorPt, roomInterior, doorPt,               // entre dans la chambre, ressort avec le résident
+    corridorPt(r.z), corridorPt(HUB_D/2+2),
+    [HUB_C[0]+off,HUB_C[1],HUB_C[2]], [EAST_SAFE[0]+off,EAST_SAFE[1],EAST_SAFE[2]]
+  ];
+  addEvacuee('nurse', NURSE_COLOR, path, 1.5, i*0.9);
+});
+// 3e infirmière : part du local Office, traverse le hall puis ouvre la
+// marche vers l'aile Est via le couloir.
+addEvacuee('nurse', NURSE_COLOR, [
+  [15, EVAC_Y, svcZ], HUB_C,
+  corridorPt(HUB_D/2+4), corridorPt(HUB_D/2+2), HUB_C, [EAST_SAFE[0],EAST_SAFE[1],EAST_SAFE[2]+1]
+], 2.8, 0);
+
+// --- 2 résidents accompagnés qui descendent par l'escalier Nord ---
+const stairPath = [
+  fromDoor(0, doorZ[3]+8),                 // sortie du couloir vers l'escalier
+  [0, EVAC_Y, HUB_D/2+CORR_L+1],            // entrée de la cage d'escalier
+  [2.5, EVAC_Y, HUB_D/2+CORR_L+5],          // haut de la volée descendante
+  [2.5, FLOOR_H/2+0.6, HUB_D/2+CORR_L+11],  // bas de cette volée / palier
+  [-2.5, FLOOR_H/2+0.6, HUB_D/2+CORR_L+8],  // palier -> volée basse
+  [-2.5, 0.6, HUB_D/2+CORR_L+2],            // bas de la volée basse
+  [0, 0.6, HUB_D/2+CORR_L+1],               // rez-de-chaussée, sortie
+];
+const stairEvacuees = [];
+[{mob:'walker', color:RESIDENT_COLORS[6], off:-0.4}, {mob:'autonomous', color:RESIDENT_COLORS[7], off:0.4}].forEach(r=>{
+  const p = stairPath.map(pt=>[pt[0]+r.off, pt[1], pt[2]]);
+  stairEvacuees.push(addEvacuee(r.mob, r.color, p, 1.7, 0.4));
+});
+// 4e infirmière : part du local Rangement, traverse le hall puis le
+// couloir, et escorte la descente par l'escalier.
+stairEvacuees.push(addEvacuee('nurse', NURSE_COLOR, [
+  [-15, EVAC_Y, svcZ], HUB_C, ...stairPath.map(pt=>[pt[0], pt[1], pt[2]+0.8])
+], 1.6, 0));
+
+/* Fumée locale dans la cage d'escalier Nord, qui s'infiltre par la porte
+   entrouverte pendant le passage des évacués. */
+const stairSmokeParticles = [];
+function spawnStairSmokePuff(){
+  const mat = new THREE.SpriteMaterial({map: smokeTexture, transparent:true, opacity:0, depthWrite:false, color:new THREE.Color(0.62,0.64,0.67)});
+  const spr = new THREE.Sprite(mat);
+  scene.add(spr);
+  stairSmokeParticles.push({
+    spr, t:0,
+    x: HUB_D ? (Math.random()-0.5)*3 : 0,
+    z0: HUB_D/2 + CORR_L + 2 + Math.random()*4,
+    y0: FLOOR_H + 2 + Math.random()*2,
+    phase: Math.random()*Math.PI*2
+  });
+}
+let stairSmokeAcc = 0;
+function updateStairSmoke(dt, doorIsOpening, simT){
+  if(doorIsOpening){
+    stairSmokeAcc += dt;
+    if(stairSmokeAcc > 0.15 && stairSmokeParticles.length < 45){ stairSmokeAcc = 0; spawnStairSmokePuff(); }
+  }
+  const exutoireOpen = exutoireProgress > 0.4; // l'exutoire du toit de l'escalier Nord
+  for(let i=stairSmokeParticles.length-1;i>=0;i--){
+    const p = stairSmokeParticles[i];
+    if(!p.extracting){
+      // Monte doucement puis reste sur place, bien visible, tant que
+      // l'exutoire n'est pas ouvert — elle ne se dissipe plus toute seule.
+      p.t = Math.min(1, p.t + dt*0.3);
+      const rise = p.t*3.2;
+      const x = p.x + Math.sin(simT*0.6+p.phase)*0.5;
+      const y = p.y0 - 1 + rise + Math.sin(simT*0.4+p.phase)*0.2;
+      const z = p.z0 + Math.cos(simT*0.5+p.phase)*0.5;
+      p.spr.position.set(x,y,z);
+      const op = Math.min(1, p.t/0.15) * 0.42;
+      p.spr.material.opacity = op;
+      const sc = 2 + p.t*3;
+      p.spr.scale.set(sc,sc,1);
+      if(exutoireOpen){ p.extracting = true; p.et = 0; p.startPos = p.spr.position.clone(); p.startOp = op; p.baseSize = sc; }
+      continue;
+    }
+    // Extraction : monte d'abord verticalement dans la cage d'escalier, ne
+    // se latéralise que vers la fin (comme aspirée par l'exutoire). La forme
+    // s'étire en hauteur façon panache de cheminée (étroit à la sortie,
+    // s'évase en montant) plutôt que de grossir en boule.
+    p.et += dt*0.16;
+    if(p.et > 1){ scene.remove(p.spr); stairSmokeParticles.splice(i,1); continue; }
+    const ex = Math.min(1, p.et);
+    const riseEase = Math.sqrt(ex);
+    const lateralEase = ex*ex;
+    const wob = (1-ex)*0.4;
+    const x = THREE.MathUtils.lerp(p.startPos.x, 0, lateralEase) + Math.sin(simT*3+p.phase)*wob;
+    const z = THREE.MathUtils.lerp(p.startPos.z, HUB_D/2 + CORR_L + 8, lateralEase) + Math.cos(simT*2.6+p.phase)*wob;
+    const y = THREE.MathUtils.lerp(p.startPos.y, ROOF_Y + 1.6, riseEase);
+    p.spr.position.set(x,y,z);
+    const stretchY = 1 + riseEase*2.6;   // s'étire en hauteur en montant
+    const widthMul = 0.5 + ex*1.4;       // s'évase progressivement, façon panache
+    p.spr.scale.set(p.baseSize*widthMul, p.baseSize*stretchY, 1);
+    const puff = ex>0.8 ? (ex-0.8)/0.2 : 0;
+    p.spr.material.opacity = Math.max(0, p.startOp*(1-puff*0.85));
+  }
+}
+
+let evacuationActive = false;
+function updateEvacuation(dt, simT){
+  if(!evacuationActive) return;
+  evacuees.forEach(e=>{
+    if(e.arrived) return;
+    e.t += dt*e.speed*0.05;
+    if(e.t < 0){ e.group.visible = false; return; }
+    e.group.visible = true;
+    const tt = Math.min(e.t, 1);
+    const [x,y,z] = pointOnPath3D(e.path, e.segLens, e.totalLen, tt);
+    const prevT = Math.max(0, tt-0.01);
+    const [px,,pz] = pointOnPath3D(e.path, e.segLens, e.totalLen, prevT);
+    e.group.position.set(x,y,z);
+    if(Math.abs(x-px)>0.001 || Math.abs(z-pz)>0.001) e.group.rotation.y = Math.atan2(x-px, z-pz);
+    if(tt>=1) e.arrived = true;
+  });
+
+  // La porte couloir/escalier s'ouvre juste avant que les évacués ne la
+  // franchissent, et se referme une fois tous passés — de la fumée en
+  // profite pour s'infiltrer dans la cage d'escalier pendant ce temps.
+  const nearDoor = stairEvacuees.some(e => !e.arrived && e.t > -0.15 && e.t < 0.25);
+  northStairDoorsFloor2.forEach(d => d.targetProgress = nearDoor ? 0 : 1);
+  updateStairSmoke(dt, nearDoor, simT);
+}
+/* ===================== FUMÉE (naturelle, foyer déclenchable) ===================== */
+/* La fumée nait dans le local ménage du bloc Nord, traverse le hall central,
+   puis se répartit vers les 3 volets hauts. Rendu en sprites à dégradé doux.
+   Un scénario identique existe au RDC et à l'étage, chacun démarré/arrêté
+   indépendamment par son bouton "Départ de feu". */
+function makeSmokeTexture(){
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size/2,size/2,0, size/2,size/2,size/2);
+  grad.addColorStop(0,   'rgba(210,214,218,0.85)');
+  grad.addColorStop(0.35,'rgba(180,186,192,0.55)');
+  grad.addColorStop(0.7, 'rgba(150,158,166,0.22)');
+  grad.addColorStop(1,   'rgba(140,148,156,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,size,size);
+  return new THREE.CanvasTexture(canvas);
+}
+const smokeTexture = makeSmokeTexture();
+
+/* Fumée qui envahit le hall central (étage) tant que les portes coupe-feu
+   ne sont pas fermées : elles laissent passer la fumée du couloir, qui
+   s'accumule alors dans le hall. Une fois les PCF fermées, plus aucune
+   nouvelle fumée n'entre et celle déjà présente se dissipe lentement. */
+const hallSmokeParticles = [];
+let hallSmokeAcc = 0;
+function spawnHallSmokePuff(){
+  const mat = new THREE.SpriteMaterial({
+    map: smokeTexture, transparent:true, opacity:0, depthWrite:false,
+    color: new THREE.Color(0.6,0.62,0.65)
+  });
+  const spr = new THREE.Sprite(mat);
+  scene.add(spr);
+  hallSmokeParticles.push({
+    spr, t:0, opacity:0,
+    x0: (Math.random()-0.5)*HUB_W*0.65,
+    z0: (Math.random()-0.5)*HUB_D*0.6,
+    y0: FLOOR_H + WALL_H - 1.2,
+    phase: Math.random()*Math.PI*2
+  });
+}
+function updateHallSmoke(dt, simT, fireActive, pcfClosed){
+  const invading = fireActive && !pcfClosed;
+  if(invading){
+    hallSmokeAcc += dt;
+    if(hallSmokeAcc > 0.12 && hallSmokeParticles.length < 70){ hallSmokeAcc = 0; spawnHallSmokePuff(); }
+  }
+  for(let i=hallSmokeParticles.length-1;i>=0;i--){
+    const p = hallSmokeParticles[i];
+    p.t = Math.min(1, p.t + dt*0.1);
+    const x = p.x0 + Math.sin(simT*0.5 + p.phase)*1.3;
+    const z = p.z0 + Math.cos(simT*0.4 + p.phase)*1.3;
+    const y = p.y0 + Math.sin(simT*0.3 + p.phase)*0.3;
+    p.spr.position.set(x, y, z);
+    if(pcfClosed){
+      // Plus de source : la fumée déjà présente se dissipe lentement.
+      p.opacity = Math.max(0, p.opacity - dt*0.05);
+    } else {
+      p.opacity = Math.min(1, p.t/0.2) * 0.35;
+    }
+    p.spr.material.opacity = p.opacity;
+    const sc = 3 + p.t*3;
+    p.spr.scale.set(sc, sc, 1);
+    if(p.opacity <= 0 && pcfClosed){ scene.remove(p.spr); hallSmokeParticles.splice(i,1); }
+  }
+}
+
+const WALL_OFF = -(CORR_W/2) + 0.25; // même formule que dans buildVolet
+const SMOKE_SOURCE_XZ = [-(INNER+OUTER)/2, NOOK_ZC];  // foyer, local ménage (bloc Nord)
+const CORRIDOR_ENTRY  = [-INNER, NOOK_ZC];             // porte du local, vers le couloir
+const HUB_POINT       = [0, 0];                        // passage par le hall
+const PCF_DOOR_POINT  = [0, HUB_D/2 + 3];               // juste devant la porte coupe-feu couloir/hall
+const BLOCKED_PATH = [SMOKE_SOURCE_XZ, CORRIDOR_ENTRY, PCF_DOOR_POINT];
+const BLOCKED_SEGLENS = [
+  Math.hypot(CORRIDOR_ENTRY[0]-SMOKE_SOURCE_XZ[0], CORRIDOR_ENTRY[1]-SMOKE_SOURCE_XZ[1]),
+  Math.hypot(PCF_DOOR_POINT[0]-CORRIDOR_ENTRY[0], PCF_DOOR_POINT[1]-CORRIDOR_ENTRY[1])
+];
+const BLOCKED_TOTAL_LEN = BLOCKED_SEGLENS[0] + BLOCKED_SEGLENS[1];
+const SMOKE_TARGETS = [
+  {pt:[WALL_OFF, HUB_D/2 + CORR_L - 8],            weight:1.4},  // volet Nord (même couloir)
+  {pt:[HUB_W/2 + CORR_L - 8, WALL_OFF],            weight:1},    // volet Est
+  {pt:[-(HUB_W/2 + CORR_L - 8), WALL_OFF],         weight:1},    // volet Ouest
+];
+function pickSmokeTarget(){
+  const total = SMOKE_TARGETS.reduce((s,t)=>s+t.weight,0);
+  let r = Math.random()*total;
+  for(const t of SMOKE_TARGETS){ if(r < t.weight) return t.pt; r -= t.weight; }
+  return SMOKE_TARGETS[0].pt;
+}
+function pointOnPath(path, segLens, totalLen, t){
+  let target = t*totalLen;
+  for(let i=0;i<segLens.length;i++){
+    if(target<=segLens[i] || i===segLens.length-1){
+      const segT = segLens[i]>0 ? Math.min(1,target/segLens[i]) : 1;
+      const p0=path[i], p1=path[i+1];
+      return [p0[0]+(p1[0]-p0[0])*segT, p0[1]+(p1[1]-p0[1])*segT];
+    }
+    target -= segLens[i];
+  }
+  return path[path.length-1];
+}
+
+/**
+ * Construit un scénario feu + fumée complet à une hauteur d'étage donnée
+ * (yOffset = 0 pour le RDC, FLOOR_H pour l'étage). doorsClosedFn renvoie
+ * l'état des PCF de cet étage (pour le confinement de la fumée).
+ */
+function createFireScenario(yOffset, doorsClosedFn, desenfumageActiveFn){
+  const state = { active:false, particles:[], spawnAcc:0, flameCones:[], density:0 };
+
+  const flameGroup = new THREE.Group();
+  flameGroup.position.set(SMOKE_SOURCE_XZ[0], yOffset + 0.6, SMOKE_SOURCE_XZ[1]);
+  flameGroup.visible = false;
+  scene.add(flameGroup);
+  const flameColors = [0xff9142, 0xff5a2e, 0xffce6b];
+  for(let i=0;i<5;i++){
+    const s = 0.5 + Math.random()*0.5;
+    const cone = new THREE.Mesh(
+      new THREE.CylinderGeometry(0, 0.35*s, 1.1*s, 8),
+      new THREE.MeshStandardMaterial({
+        color: flameColors[i%flameColors.length],
+        emissive: flameColors[i%flameColors.length],
+        emissiveIntensity: 1.4, roughness: 0.6
+      })
+    );
+    cone.position.set((Math.random()-0.5)*1.4, 0.55*s, (Math.random()-0.5)*1.4);
+    flameGroup.add(cone);
+    state.flameCones.push({mesh:cone, phase:Math.random()*Math.PI*2});
+  }
+  const fireLight = new THREE.PointLight(0xff7a3c, 1.6, 14, 2);
+  fireLight.position.set(0, 2, 0);
+  flameGroup.add(fireLight);
+
+  function spawnParticle(){
+    const closed = doorsClosedFn();
+    let dest, path, isPcfBlocked = false, isNorth = false;
+    if(closed){
+      // Compartimentage actif (PCF fermées) : la fumée cherche à rejoindre
+      // le hall et vient buter contre la porte coupe-feu.
+      dest = PCF_DOOR_POINT;
+      path = BLOCKED_PATH;
+      isPcfBlocked = true;
+    } else {
+      // Pas de compartimentage (PCF ouvertes) : rien n'arrête la fumée,
+      // elle continue dans le hall puis se répand vers les autres ailes.
+      dest = pickSmokeTarget();
+      path = [SMOKE_SOURCE_XZ, CORRIDOR_ENTRY, HUB_POINT, dest];
+      isNorth = (dest === SMOKE_TARGETS[0].pt);
+    }
+    const segLens = [];
+    for(let i=1;i<path.length;i++) segLens.push(Math.hypot(path[i][0]-path[i-1][0], path[i][1]-path[i-1][1]));
+    const totalLen = segLens.reduce((a,b)=>a+b,0);
+
+    const tint = 0.6 + Math.random()*0.12;
+    const mat = new THREE.SpriteMaterial({
+      map: smokeTexture, transparent:true, opacity:0, depthWrite:false,
+      color: new THREE.Color(tint, tint+0.02, tint+0.05)
+    });
+    const spr = new THREE.Sprite(mat);
+    scene.add(spr);
+
+    state.particles.push({
+      spr, path, segLens, totalLen, t:0,
+      speed: 0.04 + Math.random()*0.03,
+      phase1: Math.random()*Math.PI*2,
+      phase2: Math.random()*Math.PI*2,
+      heightRand: Math.random(),          // position dans la strate de fumée (0 = au plafond)
+      lateralRand: (Math.random()-0.5)*2, // dispersion latérale dans la largeur du couloir
+      sizeBase: 2.4 + Math.random()*2.4,
+      rotSpeed: (Math.random()-0.5)*0.5,
+      isNorthTarget: isNorth,
+      isPcfBlocked: isPcfBlocked
+    });
+  }
+
+  function update(dt, simT){
+    const desenfumageOn = !!(desenfumageActiveFn && desenfumageActiveFn());
+
+    // La densité de fumée dans le couloir : monte tant que le feu brûle et
+    // que les volets sont fermés, redescend dès qu'on désenfume (ou que le
+    // feu est éteint) — c'est elle qui pilote l'épaisseur du panache.
+    if(state.active && !desenfumageOn) state.density = Math.min(1, state.density + dt*0.14);
+    else if(state.active && desenfumageOn) state.density = Math.max(0, state.density + dt*0.03 - dt*0.16);
+    else state.density = Math.max(0, state.density - dt*0.12);
+
+    if(state.active){
+      state.spawnAcc += dt;
+      const spawnEvery = 0.28 - state.density*0.18; // fumée plus dense -> spawn plus fréquent
+      const maxParticles = 30 + Math.round(state.density*65); // jusqu'à ~95 particules à pleine densité
+      if(state.spawnAcc > spawnEvery && state.particles.length < maxParticles){
+        state.spawnAcc = 0;
+        spawnParticle();
+      }
+    }
+    flameGroup.visible = state.active;
+    if(state.active){
+      state.flameCones.forEach(f=>{
+        const flick = 1 + Math.sin(simT*9 + f.phase)*0.18 + Math.sin(simT*23+f.phase)*0.08;
+        f.mesh.scale.set(flick, flick*(1+Math.sin(simT*6+f.phase)*0.15), flick);
+      });
+      fireLight.intensity = 1.4 + Math.sin(simT*14)*0.3;
+    }
+    for(let i=state.particles.length-1;i>=0;i--){
+      const p = state.particles[i];
+      // Étape 1 : la fumée remplit d'abord le local (progression lente tant
+      // que la densité est faible), avant de se répandre plus librement vers
+      // le couloir puis le hall — comme une pièce qui se remplit avant de
+      // déborder.
+      const doorsClosed = doorsClosedFn();
+      if(p.isPcfBlocked && !doorsClosed){
+        // La porte s'est rouverte : cette fumée n'est plus bloquée.
+        p.isPcfBlocked = false;
+      } else if(doorsClosed && !p.isPcfBlocked){
+        // La porte vient de se fermer (ou est déjà fermée) : on reroute
+        // immédiatement cette fumée, même déjà en vol, sur le trajet sûr
+        // qui s'arrête pile devant la porte — plus de calcul de fraction
+        // approximatif qui pouvait la laisser dépasser la porte.
+        p.path = BLOCKED_PATH;
+        p.segLens = BLOCKED_SEGLENS;
+        p.totalLen = BLOCKED_TOTAL_LEN;
+        p.t = Math.min(p.t, 0.75);
+        p.isPcfBlocked = true;
+        p.isNorthTarget = false;
+      }
+
+      const pcfBlocked = p.isPcfBlocked && p.t > 0.85;
+      const pcfClearing = p.isPcfBlocked && desenfumageOn; // le désenfumage local absorbe le surplus
+      const blocked = p.isNorthTarget && !desenfumageOn && p.t > 0.72;
+      const extracted = p.isNorthTarget && desenfumageOn && !doorsClosed;
+      let speedMul;
+      if(p.t < 0.12) speedMul = THREE.MathUtils.lerp(0.12, 1, state.density);
+      else if(pcfClearing) speedMul = 1.2;   // se dissipe plus vite, comme aspirée par le désenfumage local
+      else if(pcfBlocked) speedMul = 0.03;   // vient buter contre la porte fermée, s'y accumule
+      else if(blocked) speedMul = 0.04;
+      else if(extracted) speedMul = 1.35;    // extraction douce, pas trop rapide
+      else speedMul = 1;
+      p.t += dt * p.speed * speedMul;
+      // Porte coupe-feu fermée : cette fumée ne la franchit jamais tant
+      // qu'elle reste fermée (elle vient s'y accumuler juste devant).
+      if(pcfBlocked && !pcfClearing) p.t = Math.min(p.t, 0.99);
+      if(p.t > 1.1){ scene.remove(p.spr); state.particles.splice(i,1); continue; }
+      const tt = Math.min(p.t,1);
+      const [px,pz] = pointOnPath(p.path, p.segLens, p.totalLen, tt);
+      // Phases : 0.82 -> 0.95 monte à travers le volet/conduit jusqu'au toit ;
+      // 0.95 -> 1.1 sort par la tourelle et part en panache visible, avant de se disperser.
+      const riseFactor = p.t > 0.82 ? Math.min(1, (p.t-0.82)/0.13) : 0;
+      const ventFactor  = p.t > 0.95 ? Math.min(1, (p.t-0.95)/0.15) : 0;
+      const turbA = Math.sin(p.t*2.0 + p.phase1)*1.1 + p.lateralRand*2.4 + ventFactor*Math.sin(p.t*3+p.phase2)*1.6;
+      const turbB = Math.sin(p.t*4.6 + p.phase2)*0.5 + ventFactor*Math.cos(p.t*3+p.phase1)*1.6;
+      const x = px + turbA;
+      const z = pz + turbB;
+
+      // Strate de fumée : reste au plafond au début, puis descend peu à peu
+      // vers le sol tant que le désenfumage n'est pas actionné (elle remonte
+      // et s'assainit dès qu'on l'active). Le plafond n'a pas besoin d'être
+      // visible pour que ce comportement se voie.
+      const ceilingY = yOffset + WALL_H - 0.5;
+      const layerDepth = 6.5;
+      const stratY = ceilingY - p.heightRand*state.density*layerDepth;
+      const y = riseFactor > 0
+        ? THREE.MathUtils.lerp(stratY, ROOF_Y + 1.6, riseFactor) + ventFactor*1.4
+        : stratY + Math.sin(p.t*1.2 + p.phase1)*0.2;
+
+      let opacity, scale;
+      const densityPeak = 0.4 + state.density*0.35; // fumée plus opaque quand elle s'accumule
+      const densitySize = 1 + state.density*0.6;    // panache plus épais/large
+      if(p.t < 0.1){ opacity = (p.t/0.1)*densityPeak; scale = p.sizeBase*densitySize*(0.3+(p.t/0.1)*0.5); }
+      else if(p.t > 0.95){
+        // panache bien visible qui sort de la tourelle, puis se dissout dans le ciel
+        const f = Math.min(1,(p.t-0.95)/0.15);
+        opacity = densityPeak*(1-f*0.85);
+        scale = p.sizeBase*densitySize*(1.15+f*0.9);
+      } else if(p.t > 0.82){
+        opacity = densityPeak;
+        scale = p.sizeBase*densitySize*1.15;
+      } else {
+        opacity = densityPeak;
+        scale = p.sizeBase*densitySize*(1+(p.t-0.1)*0.7);
+      }
+
+      p.spr.position.set(x, y, z);
+      p.spr.material.opacity = Math.max(0, opacity);
+      p.spr.material.rotation += p.rotSpeed*dt;
+      p.spr.scale.set(Math.max(0.1,scale), Math.max(0.1,scale), 1);
+    }
+  }
+
+  return {
+    update,
+    setActive(v){ state.active = v; },
+    get active(){ return state.active; },
+    reset(){
+      state.active = false;
+      state.density = 0;
+      state.spawnAcc = 0;
+      state.particles.forEach(p=> scene.remove(p.spr));
+      state.particles.length = 0;
+      flameGroup.visible = false;
+    }
+  };
+}
+
+// Le scénario RDC est retiré : on se concentre uniquement sur l'étage.
+const fireFloor2 = createFireScenario(FLOOR_H, ()=>fireDoorsClosedFloor2, ()=>desenfumageActiveFloor2);
+
+// Porte du local ménage : laissée ouverte en permanence (on considère
+// qu'elle est calée), pour que la fumée puisse s'échapper librement.
+const menageDoorStateGround = {
+  leafGroup: menageDoorGround,
+  openAngle: menageDoorGround.userData.openAngle,
+  closedAngle: menageDoorGround.userData.closedAngle,
+  progress: 0, targetProgress: 0
+};
+const menageDoorStateFloor2 = menageDoorFloor2 ? {
+  leafGroup: menageDoorFloor2,
+  openAngle: menageDoorFloor2.userData.openAngle,
+  closedAngle: menageDoorFloor2.userData.closedAngle,
+  progress: 0, targetProgress: 0
+} : null;
+const menageDoors = [menageDoorStateGround, menageDoorStateFloor2].filter(Boolean);
+
+/* Porte de chambre pédagogique : fermée par défaut. Le bouton dédié l'ouvre
+   pour montrer comment la fumée envahit une chambre normalement protégée
+   dès que sa porte reste ouverte. */
+const demoRoomDoorStateGround = {
+  leafGroup: demoRoomDoorGround,
+  openAngle: demoRoomDoorGround.userData.openAngle,
+  closedAngle: demoRoomDoorGround.userData.closedAngle,
+  progress: 1, targetProgress: 1
+};
+const demoRoomDoorStateFloor2 = demoRoomDoorFloor2 ? {
+  leafGroup: demoRoomDoorFloor2,
+  openAngle: demoRoomDoorFloor2.userData.openAngle,
+  closedAngle: demoRoomDoorFloor2.userData.closedAngle,
+  progress: 1, targetProgress: 1
+} : null;
+const demoRoomDoors = [demoRoomDoorStateGround, demoRoomDoorStateFloor2].filter(Boolean);
+let demoRoomOpen = false;
+
+/* Fumée qui envahit la chambre de démo (étage) une fois la porte ouverte,
+   tant qu'il y a de la fumée disponible dans le couloir devant sa porte. */
+const roomInvasionParticles = [];
+let roomInvasionAcc = 0;
+function spawnRoomInvasionPuff(){
+  const mat = new THREE.SpriteMaterial({map: smokeTexture, transparent:true, opacity:0, depthWrite:false, color:new THREE.Color(0.62,0.64,0.67)});
+  const spr = new THREE.Sprite(mat);
+  scene.add(spr);
+  roomInvasionParticles.push({
+    spr, t:0,
+    x0: -CORR_W/2 - 1,
+    xTarget: -LAT - (Math.random()*4),
+    y0: FLOOR_H + WALL_H - 1.2,
+    z: demoRoomZ + (Math.random()-0.5)*ROOM_W*0.7,
+    phase: Math.random()*Math.PI*2
+  });
+}
+function updateRoomInvasion(dt, simT){
+  if(demoRoomOpen){
+    roomInvasionAcc += dt;
+    if(roomInvasionAcc > 0.2 && roomInvasionParticles.length < 30){ roomInvasionAcc = 0; spawnRoomInvasionPuff(); }
+  }
+  for(let i=roomInvasionParticles.length-1;i>=0;i--){
+    const p = roomInvasionParticles[i];
+    p.t = Math.min(1, p.t + dt*0.12);
+    const x = THREE.MathUtils.lerp(p.x0, p.xTarget, Math.sqrt(p.t)) + Math.sin(simT*0.7+p.phase)*0.4;
+    const y = p.y0 + Math.sin(simT*0.5+p.phase)*0.3;
+    p.spr.position.set(x, y, p.z);
+    const op = Math.min(1, p.t/0.2) * (demoRoomOpen ? 0.4 : 0.15);
+    p.spr.material.opacity = op;
+    const sc = 2.2 + p.t*2.4;
+    p.spr.scale.set(sc,sc,1);
+    if(!demoRoomOpen && p.t>=1){ scene.remove(p.spr); roomInvasionParticles.splice(i,1); }
+  }
+}
+
+function wingTag(text, x, z){
+  const spr = makeLabel(text);
+  spr.position.set(x, 22, z);
+  spr.material.opacity = 0.85;
+  scene.add(spr);
+}
+wingTag('BLOC NORD', 0, HUB_D/2 + CORR_L/2 + 8);
+wingTag('BLOC EST', HUB_W/2 + CORR_L/2, 0);
+wingTag('BLOC OUEST', -HUB_W/2 - CORR_L/2, 0);
+
+/* ===================== RENDER LOOP ===================== */
+function onResize(){
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', onResize);
+
+let simTime = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  simTime += dt;
+  fireFloor2.update(dt, simTime);
+  updateHallSmoke(dt, simTime, fireFloor2.active, fireDoorsClosedFloor2);
+  updateFireDoorsList(doubleDoors, dt);
+  updateFireDoorsList(doubleDoorsFloor2, dt);
+  updateFireDoorsList(menageDoors, dt);
+  updateFireDoorsList(northStairDoorsFloor2, dt);
+  updateFireDoorsList(demoRoomDoors, dt);
+  updateRoomInvasion(dt, simTime);
+  updateExutoire(dt);
+  updateVoletFlaps(dt);
+  updateEvacuation(dt, simTime);
+  activeFans.forEach(f=>{ if(f.userData.spinning) f.rotation.y += dt*7; });
+  const northTurretActive = desenfumageActive || desenfumageActiveFloor2;
+  [[northTurretFan,northTurretActive], [eastTurretFan,true], [westTurretFan,true]].forEach(([fan,on])=>{
+    fan.rotation.y += dt*(on?9:1.1);
+    fan.userData.disc.material.emissive.set(on?0x0d3a52:0x000000);
+    fan.userData.disc.material.emissiveIntensity = on?0.6:0;
+  });
+  roofTurretFans.forEach(f=>{ if(f!==northTurretFan && f!==eastTurretFan && f!==westTurretFan) f.rotation.y += dt*1.2; });
+  if(walkMode){
+    updateWalk(dt);
+  } else {
+    controls.update();
+  }
+  renderer.render(scene, camera);
+}
+const clock = new THREE.Clock();
+animate();
+
+document.getElementById('loading').style.opacity = '0';
+setTimeout(()=>document.getElementById('loading').remove(), 400);
+</script>
+</body>
+</html>
